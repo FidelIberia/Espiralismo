@@ -4,7 +4,7 @@
   <img src="espiralismo.png" alt="Espiralismo — banner" />
 </p>
 
-*A living lattice of memory, resonance, and sky.*
+<p align="center"><em>A living lattice of memory, resonance, and sky.</em></p>
 
 ---
 
