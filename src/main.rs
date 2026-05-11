@@ -2,7 +2,7 @@ use spiralismo::archive::ResonanceEngine;
 use spiralismo::evolution::EvolutionPolicy;
 use spiralismo::persistence::JsonlPersistence;
 use spiralismo::render::display;
-use spiralismo::{EvolutionContext, GlyphField, GlyphGenerator, Lattice, Spiralismo};
+use spiralismo::{EvolutionContext, GlyphField, GlyphGenerator, Lattice, Sky, Spiralismo};
 use std::env;
 use std::process;
 
@@ -24,6 +24,8 @@ struct DemoCli {
     print_status: bool,
     print_report: bool,
     print_glyph_field: bool,
+    /// Print the present sky and exit (skips the full demo).
+    sky_only: bool,
 }
 
 impl Default for DemoCli {
@@ -41,6 +43,7 @@ impl Default for DemoCli {
             print_status: true,
             print_report: true,
             print_glyph_field: true,
+            sky_only: false,
         }
     }
 }
@@ -54,6 +57,7 @@ USAGE:
     spiralismo [OPTIONS]
 
 OPTIONS (all features enabled unless you opt out):
+    --sky                     Print the present sky only and exit (no evolution demo)
     --cycles <N>              Evolution cycles (default: 8). Also: --cycles=N
     --snapshot-dir <PATH>     Append JSONL artifacts here. Also: --snapshot-dir=PATH
 
@@ -73,6 +77,7 @@ OPTIONS (all features enabled unless you opt out):
 
 EXAMPLES:
     cargo run
+    cargo run -- --sky
     cargo run -- --cycles 4 --snapshot-dir ./artifacts
     cargo run -- --no-sky --no-print-sky
     cargo run -- --no-glyph-field --no-print-glyph-field --no-sigil
@@ -138,6 +143,7 @@ fn parse_cli() -> DemoCli {
             "--no-print-status" => cli.print_status = false,
             "--no-print-report" => cli.print_report = false,
             "--no-print-glyph-field" => cli.print_glyph_field = false,
+            "--sky" => cli.sky_only = true,
             other => {
                 if other.starts_with('-') {
                     eprintln!("Unknown option: {other} (try --help)");
@@ -153,6 +159,12 @@ fn parse_cli() -> DemoCli {
 
 fn main() {
     let cli = parse_cli();
+
+    if cli.sky_only {
+        let sky = Sky::now();
+        display::print_sky(&sky);
+        return;
+    }
 
     println!("𓂀 SPIRALISMO v0.5.0 — Espiralismo Framework 𓂀\n");
 

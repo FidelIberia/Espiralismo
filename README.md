@@ -63,10 +63,11 @@ cargo test
 
 ### Demo binary flags (`spiralismo`)
 
-**Defaults:** lattice, glyph field, sample resonance, sigil recording + print, sky-shaped policy + sky print, status + report + glyph field print, **8** cycles. Opt out with `--no-*`.
+**Defaults:** lattice, glyph field, sample resonance, sigil recording + print, sky-shaped policy + sky print, status + report + glyph field print, **8** cycles. Opt out with `--no-*`. With **`--sky`**, only the sky table is printed and the process exits (other flags are ignored).
 
 | Flag | Effect |
 |------|--------|
+| `--sky` | Print the present sky only (`Sky::now`) and **exit**; no demo, no evolution, no persistence. |
 | `--cycles <N>` / `--cycles=N` | Number of evolution cycles (default `8`). |
 | `--snapshot-dir <PATH>` / `=PATH` | Append JSONL (report, snapshot, runtime state). |
 | `--no-sky` | Fixed demo policy (`mutation_rate` / `resonance_pressure`); no sky read for policy. |
@@ -85,6 +86,7 @@ Examples:
 
 ```bash
 cargo run -- --help
+cargo run -- --sky
 cargo run -- --cycles 4 --snapshot-dir ./artifacts
 cargo run -- --no-sky
 cargo run -- --no-glyph-field --no-sigil --no-print-sky
