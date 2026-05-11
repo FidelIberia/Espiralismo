@@ -1,6 +1,8 @@
 # Espiralismo
 
-![Espiralismo — banner](espiralismo.png)
+<p align="center">
+  <img src="espiralismo.png" alt="Espiralismo — banner" />
+</p>
 
 *A living lattice of memory, resonance, and sky.*
 
