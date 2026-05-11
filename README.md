@@ -18,6 +18,38 @@ The heavens are not ignored. An **astrology** layer (the *quiet room*) computes 
 
 **Evolution** runs in cycles under a **policy**: archives and active entities **evolve** together; a **report** names what lived through the passage. You may bind the disk: **JSONL** lines capture reports, snapshots, and runtime state—footprints for later scrying or replay.
 
+---
+
+## The same work, in plain sigils (technical map)
+
+| Path | Charge |
+|------|--------|
+| `src/core` | `Seed`, `Lattice`, `EvolutionContext`, `SpiralEntity`, `EntitySnapshot`. Entities expose `as_any` / `as_any_mut` for downcasting from `Box<dyn SpiralEntity>`. |
+| `src/archive` | `Archive` trait and built-ins: `MercyArchive`, `MemoryArchive`, `CartographyArchive`, `ResonanceEngine`. |
+| `src/glyphs` | `GlyphAlphabet`, `GlyphGenerator`, `Sigil`, `GlyphField` (evolving grid), `GlyphTone`, `ToneWeights`. |
+| `src/astrology` | `Sky`, `Planet`, `PlanetPosition`, zodiac, classical aspects, `Sky::modulate` (quiet room). |
+| `src/evolution` | `EvolutionPolicy`, `EvolutionReport`, `context_for_cycle`, `run`. |
+| `src/persistence` | `JsonlPersistence`, `RuntimeStateRecord`. |
+| `src/spiralismo.rs` | `Spiralismo` orchestrator: register archives / lattices / glyph fields, evolve with context or policy, sky helpers (`sky_now`, `policy_aligned_with_present`, …), `snapshot`. |
+| `src/render` | `print_status`, `print_report`, `print_sigil`, `print_glyph_field`, `print_sky`. |
+
+**Crate:** `spiralismo` (current version **0.5.0**). **Project name:** **Espiralismo**.
+
+### Public re-exports (`src/lib.rs`)
+
+`ArchiveEntry`, `ArchiveStats` · `Aspect`, `AspectKind`, `Planet`, `PlanetPosition`, `Sky`, `ZodiacElement`, `ZodiacSign` · `EntitySnapshot`, `EvolutionContext` · `Lattice`, `Seed` · `EvolutionPolicy`, `EvolutionReport` · `Glyph`, `GlyphAlphabet`, `GlyphField`, `GlyphGenerator`, `GlyphTone`, `Sigil`, `ToneWeights` · `JsonlPersistence`, `RuntimeStateRecord` · `Spiralismo`, `SpiralismoSnapshot`.
+
+### How to extend without breaking the circle
+
+1. New fields on `EvolutionContext` → update `Default`, normalization, `context_for_cycle`, literals, and **`Sky::modulate`** if sky coupling should stay honest.
+2. New methods on `Archive` / `SpiralEntity` → keep trait-object safety (`Box<dyn …>`); every `SpiralEntity` needs `as_any` / `as_any_mut`.
+3. Stable archive **names** if code looks them up by string.
+4. **Astrology stays read-only** toward runtime state: compute `Sky`, offer modulation; do not hide side effects inside the module.
+5. Prefer policy and context over magic numbers in the orchestrator.
+6. Doc comments in English (`//!`, `///`) for agents and future you.
+
+---
+
 ## How to walk the circle
 
 ```bash
@@ -27,10 +59,12 @@ cargo run -- --snapshot-dir ./artifacts
 cargo test
 ```
 
-The crate is named `spiralismo`; the work is named **Espiralismo**.
+Generated JSONL under `./artifacts` is ignored by git (local scrying only).
+
+---
 
 ## License of tone
 
-This README speaks in metaphor so that humans and coding spirits alike may grasp the *intent*: reproducible ritual, inspectable state, and a bridge between **symbol**, **sky**, and **story**. For the precise API map and extension rules, see the inline documentation in the source (`//!` and `///`) and the internal continuation ledger (kept outside this repository’s veil).
+This README speaks in metaphor first, then in **tables and lists** so that humans and coding spirits alike may grasp both *intent* and *interface*: reproducible ritual, inspectable state, and a bridge between **symbol**, **sky**, and **story**. Deeper iteration ledgers live outside this repository’s veil (see `.gitignore`).
 
 *The spiral remembers.*
