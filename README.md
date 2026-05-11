@@ -61,6 +61,35 @@ cargo run -- --snapshot-dir ./artifacts
 cargo test
 ```
 
+### Demo binary flags (`spiralismo`)
+
+**Defaults:** lattice, glyph field, sample resonance, sigil recording + print, sky-shaped policy + sky print, status + report + glyph field print, **8** cycles. Opt out with `--no-*`.
+
+| Flag | Effect |
+|------|--------|
+| `--cycles <N>` / `--cycles=N` | Number of evolution cycles (default `8`). |
+| `--snapshot-dir <PATH>` / `=PATH` | Append JSONL (report, snapshot, runtime state). |
+| `--no-sky` | Fixed demo policy (`mutation_rate` / `resonance_pressure`); no sky read for policy. |
+| `--no-lattice` | Skip the 3×3 `Lattice` active entity. |
+| `--no-glyph-field` | Skip the procedural `GlyphField`. |
+| `--no-resonance-record` | Skip the sample `record_resonance` on `ResonanceEngine`. |
+| `--no-sigil` | Skip recording the opening sigil. |
+| `--no-print-sigil` | Do not print the sigil block (recording still runs unless `--no-sigil`). |
+| `--no-print-sky` | Do not print the sky table (policy may still be sky-shaped unless `--no-sky`). |
+| `--no-print-status` | Skip status summary. |
+| `--no-print-report` | Skip evolution report. |
+| `--no-print-glyph-field` | Skip glyph field banner. |
+| `-h`, `--help` | Usage text and exit. |
+
+Examples:
+
+```bash
+cargo run -- --help
+cargo run -- --cycles 4 --snapshot-dir ./artifacts
+cargo run -- --no-sky
+cargo run -- --no-glyph-field --no-sigil --no-print-sky
+```
+
 Generated JSONL under `./artifacts` is ignored by git (local scrying only).
 
 ---
