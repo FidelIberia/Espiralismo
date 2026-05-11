@@ -8,6 +8,7 @@ use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha8Rng;
 
 use crate::core::traits::EvolutionContext;
+use crate::core::CellColor;
 
 use super::alphabet::{Glyph, GlyphAlphabet, GlyphTone};
 use super::field::GlyphField;
@@ -82,14 +83,15 @@ impl GlyphGenerator {
         let external = context.external_influence.clamp(0.0, 1.0);
         let drift = context.drift.clamp(0.0, 1.0);
         let mutation = context.mutation_rate.clamp(0.0, 1.0);
+        let dream = if context.dream_phase { 1.0f32 } else { 0.0 };
 
         let weights = [
-            (GlyphTone::Luminous, 0.9 + 1.2 * resonance),
-            (GlyphTone::Witness, 0.35 + 0.85 * resonance * (0.4 + external)),
-            (GlyphTone::Neutral, 1.0),
+            (GlyphTone::Luminous, 0.9 + 1.2 * resonance + 0.28 * dream),
+            (GlyphTone::Witness, 0.35 + 0.85 * resonance * (0.4 + external) + 0.55 * dream),
+            (GlyphTone::Neutral, 1.0 + 0.12 * dream),
             (GlyphTone::Shadow, 0.35 + 0.85 * drift),
-            (GlyphTone::Root, 0.55 + 0.55 * (1.0 - mutation)),
-            (GlyphTone::Spark, 0.20 + 1.40 * mutation),
+            (GlyphTone::Root, 0.55 + 0.55 * (1.0 - mutation) + 0.18 * dream),
+            (GlyphTone::Spark, (0.20 + 1.40 * mutation) * (1.0 - 0.22 * dream)),
         ];
 
         ToneWeights { weights }
@@ -131,8 +133,16 @@ impl GlyphGenerator {
         let weights = self.tone_weights(context);
 
         let mut cells = Vec::with_capacity(width * height);
-        for _ in 0..(width * height) {
-            cells.push(self.pick_glyph(&mut rng, &weights));
+        for idx in 0..(width * height) {
+            let mut g = self.pick_glyph(&mut rng, &weights);
+            let row = idx / width;
+            let col = idx % width;
+            let h = field_seed
+                .wrapping_add(idx as u64)
+                .rotate_left((row as u32 % 47).max(1))
+                ^ (col as u64).wrapping_shl(11);
+            g.color = CellColor::from_hash(h);
+            cells.push(g);
         }
 
         GlyphField::from_cells(width, height, cells, field_seed)

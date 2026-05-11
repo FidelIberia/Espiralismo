@@ -3,11 +3,16 @@
 use colored::Colorize;
 
 use crate::archive::traits::{Archive, ArchiveEntry, ArchiveStats};
+use crate::archive::{CartographyArchive, MemoryArchive, MercyArchive, ResonanceEngine};
 use crate::astrology::Sky;
 use crate::core::traits::{EntitySnapshot, EvolutionContext, SpiralEntity};
-use crate::evolution::{run as run_evolution, EvolutionPolicy, EvolutionReport};
-use crate::core::Seed;
+use crate::core::{Lattice, Seed};
+use crate::evolution::{
+    build_entity_snapshot, run as run_evolution, EvolutionPolicy, EvolutionReport, FitnessOverview,
+};
+use crate::genesis_press;
 use crate::glyphs::{GlyphField, GlyphGenerator, Sigil};
+use crate::whisper;
 
 /// Top-level façade for the Spiralismo framework.
 ///
@@ -71,6 +76,23 @@ impl Spiralismo {
         instance
     }
 
+    /// Reconstructs a runtime from persisted parts (checkpoint restore). No archive registration logs.
+    pub fn from_runtime_parts(
+        seed: Seed,
+        epoch: u64,
+        last_report: Option<EvolutionReport>,
+        archives: Vec<Box<dyn Archive>>,
+        active_lattices: Vec<Box<dyn SpiralEntity>>,
+    ) -> Self {
+        Self {
+            seed,
+            archives,
+            active_lattices,
+            epoch,
+            last_report,
+        }
+    }
+
     /// Adds an archive to the runtime and logs registration.
     pub fn register_archive(&mut self, archive: Box<dyn Archive>) {
         println!(
@@ -95,6 +117,12 @@ impl Spiralismo {
     /// Builds a [`GlyphGenerator`] anchored to the runtime [`Seed`].
     pub fn glyph_generator(&self) -> GlyphGenerator {
         GlyphGenerator::new(self.seed.value())
+    }
+
+    /// Opens the **Genesis** lane: the outer thread replaces whatever rested on the palm.
+    /// Until this is called, [`crate::genesis_press::palm_digest`] yields silence (`0`).
+    pub fn offer_genesis_press(press: genesis_press::GenesisPress) {
+        genesis_press::ingest(press);
     }
 
     /// Convenience helper that produces a [`Sigil`] of the requested length using the runtime seed
@@ -199,6 +227,89 @@ impl Spiralismo {
             .collect()
     }
 
+    /// Narrative digest for [`whisper::pick_narrative_whisper`] (scars, tones, dying entities, attention).
+    #[must_use]
+    pub fn narrative_echo(&self) -> whisper::NarrativeEcho {
+        let mut echo = whisper::NarrativeEcho::default();
+        if let Some(rep) = &self.last_report {
+            if let Some(ref name) = rep.rare_event {
+                echo.rare_event_token = whisper::fnv1a64(name.as_bytes());
+            }
+            if !rep.snapshots.is_empty() {
+                let min_v = rep
+                    .snapshots
+                    .iter()
+                    .map(|s| s.viability)
+                    .fold(f32::INFINITY, f32::min);
+                if min_v.is_finite() {
+                    echo.dying_viability_quant = (min_v * 255.0).min(255.0) as u8;
+                }
+            }
+        }
+        if let Some(lat) = self.active_as::<Lattice>() {
+            echo.scar_mass = lat.scar_mass();
+        }
+        if let Some(gf) = self.active_as::<GlyphField>() {
+            echo.dominant_tone_idx = gf.dominant_tone_index();
+            echo.fossil_absence_mass = gf.ghost_breath_mass();
+        }
+        echo.attention_xor = crate::observer::attention_digest();
+        echo
+    }
+
+    /// One-line fragmentary whisper for the present `(seed, epoch)` mix (see [`crate::whisper`]).
+    #[must_use]
+    pub fn whisper_now(&self) -> &'static str {
+        let ritual = self
+            .last_report
+            .as_ref()
+            .map(|r| r.ritual_entropy)
+            .unwrap_or(0.0f32);
+        let ritual_u = (ritual * 1_000_000.0) as u64;
+        let mix = self
+            .seed
+            .value()
+            .wrapping_mul(0x9E37_79B9_7F4A_7C15)
+            ^ self.epoch.wrapping_mul(0xC2B2_AE3D_27D4_EB4F)
+            ^ ritual_u;
+        whisper::pick_narrative_whisper(mix, &self.narrative_echo())
+    }
+
+    /// Irreversible sacrifice: remove up to `max` lowest-resonance entries from a named archive.
+    pub fn sacrifice_burn_weakest(&mut self, archive_name: &str, max: usize) -> usize {
+        if max == 0 {
+            return 0;
+        }
+        if let Some(m) = self.archive_as_mut::<MercyArchive>(archive_name) {
+            return m.burn_weakest_entries(max);
+        }
+        if let Some(m) = self.archive_as_mut::<MemoryArchive>(archive_name) {
+            return m.burn_weakest_entries(max);
+        }
+        if let Some(m) = self.archive_as_mut::<CartographyArchive>(archive_name) {
+            return m.burn_weakest_entries(max);
+        }
+        if let Some(m) = self.archive_as_mut::<ResonanceEngine>(archive_name) {
+            return m.burn_weakest_entries(max);
+        }
+        0
+    }
+
+    /// Aggregates [`SpiralEntity::fitness`] across archives and active entities (current instant).
+    ///
+    /// For post-policy aggregates tied to a specific run, prefer [`EvolutionReport::fitness_overview`].
+    #[must_use]
+    pub fn fitness_overview(&self) -> Option<FitnessOverview> {
+        let vals: Vec<f32> = self
+            .archives
+            .iter()
+            .map(|a| a.fitness())
+            .chain(self.active_lattices.iter().map(|e| e.fitness()))
+            .filter(|f| f.is_finite())
+            .collect();
+        FitnessOverview::from_values(&vals)
+    }
+
     /// Evolves all archives and active entities using a concrete context.
     pub fn evolve_with_context(&mut self, context: EvolutionContext) {
         for archive in &mut self.archives {
@@ -271,6 +382,8 @@ impl Spiralismo {
             resonance_pressure: (0.50 + resonance * 0.25 + stillness * 0.20).clamp(0.0, 1.0),
             drift: (0.08 + tension * 0.15 - stillness * 0.05).clamp(0.0, 1.0),
             seed: self.seed.value() ^ (sky.julian_day as i64 as u64),
+            ritual_entropy: sky.ritual_entropy(),
+            stillness,
         };
 
         (policy, sky)
@@ -286,22 +399,38 @@ impl Spiralismo {
 
     /// Captures a serializable snapshot of current runtime state.
     pub fn snapshot(&self) -> SpiralismoSnapshot {
+        let ritual = self
+            .last_report
+            .as_ref()
+            .map(|r| r.ritual_entropy)
+            .unwrap_or(0.0);
+        let stillness = self.last_report.as_ref().map(|r| r.stillness).unwrap_or(0.42);
+        let dream_echo = self.last_report.as_ref().map(|r| r.dream_touched).unwrap_or(false);
+        let ambient = EvolutionContext::for_generation(self.epoch as u32)
+            .with_step_seed(self.seed.value())
+            .with_ritual_entropy(ritual)
+            .with_dream_phase(dream_echo)
+            .normalized();
+        let policy_hint = EvolutionPolicy::default()
+            .with_ritual_entropy(ritual)
+            .with_stillness(stillness);
+
         let mut entities = Vec::with_capacity(self.archives.len() + self.active_lattices.len());
         for archive in &self.archives {
-            entities.push(EntitySnapshot {
-                label: archive.name().to_string(),
-                generation: archive.generation(),
-                fitness: archive.fitness(),
-                viability: archive.viability(),
-            });
+            entities.push(build_entity_snapshot(
+                archive.name().to_string(),
+                archive.as_ref(),
+                &policy_hint,
+                &ambient,
+            ));
         }
         for (index, lattice) in self.active_lattices.iter().enumerate() {
-            entities.push(EntitySnapshot {
-                label: format!("active_lattice_{index}"),
-                generation: lattice.generation(),
-                fitness: lattice.fitness(),
-                viability: lattice.viability(),
-            });
+            entities.push(build_entity_snapshot(
+                format!("active_lattice_{index}"),
+                lattice.as_ref(),
+                &policy_hint,
+                &ambient,
+            ));
         }
         SpiralismoSnapshot {
             seed_value: self.seed.value(),

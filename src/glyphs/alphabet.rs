@@ -5,6 +5,8 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::core::CellColor;
+
 /// Symbolic tone used to group glyphs by narrative role.
 ///
 /// Tones drive both intra-cell selection (which glyph) and inter-cell distribution (how often).
@@ -48,8 +50,29 @@ impl GlyphTone {
     }
 }
 
+fn cell_color_for_tone(tone: GlyphTone) -> CellColor {
+    match tone {
+        GlyphTone::Luminous => CellColor::BrightYellow,
+        GlyphTone::Witness => CellColor::BrightMagenta,
+        GlyphTone::Neutral => CellColor::Cyan,
+        GlyphTone::Shadow => CellColor::BrightBlue,
+        GlyphTone::Root => CellColor::BrightGreen,
+        GlyphTone::Spark => CellColor::BrightRed,
+    }
+}
+
+fn glyph_entry(symbol: char, tone: GlyphTone, weight: f32, name: &str) -> Glyph {
+    Glyph {
+        symbol,
+        tone,
+        weight,
+        name: name.into(),
+        color: cell_color_for_tone(tone),
+    }
+}
+
 /// Single glyph entry in a [`GlyphAlphabet`].
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Glyph {
     /// Display symbol (Unicode).
     pub symbol: char,
@@ -57,8 +80,10 @@ pub struct Glyph {
     pub tone: GlyphTone,
     /// Intra-tone selection weight (must be > 0.0 to be reachable).
     pub weight: f32,
-    /// Human-readable name (used for diagnostics).
-    pub name: &'static str,
+    /// Human-readable name (used for diagnostics and checkpoints).
+    pub name: String,
+    /// Terminal / checkpoint color dimension (may be overridden per cell in fields).
+    pub color: CellColor,
 }
 
 /// Ordered alphabet of [`Glyph`]s used by procedural generators.
@@ -72,31 +97,26 @@ impl GlyphAlphabet {
     pub fn canonical() -> Self {
         Self {
             entries: vec![
-                Glyph { symbol: '◉', tone: GlyphTone::Luminous, weight: 1.5, name: "solar_core" },
-                Glyph { symbol: '✦', tone: GlyphTone::Luminous, weight: 1.0, name: "starwise" },
-                Glyph { symbol: '✧', tone: GlyphTone::Luminous, weight: 0.7, name: "starwise_open" },
-                Glyph { symbol: '☼', tone: GlyphTone::Luminous, weight: 0.8, name: "sunburst" },
-
-                Glyph { symbol: '𓂀', tone: GlyphTone::Witness, weight: 1.2, name: "eye_of_horus" },
-                Glyph { symbol: '𓁹', tone: GlyphTone::Witness, weight: 0.9, name: "watcher" },
-                Glyph { symbol: '◎', tone: GlyphTone::Witness, weight: 0.7, name: "halo_ring" },
-
-                Glyph { symbol: '⟡', tone: GlyphTone::Neutral, weight: 1.2, name: "diamond_open" },
-                Glyph { symbol: '⟢', tone: GlyphTone::Neutral, weight: 0.9, name: "diamond_left" },
-                Glyph { symbol: '⟣', tone: GlyphTone::Neutral, weight: 0.9, name: "diamond_right" },
-                Glyph { symbol: '◇', tone: GlyphTone::Neutral, weight: 0.7, name: "lozenge" },
-
-                Glyph { symbol: '☽', tone: GlyphTone::Shadow, weight: 1.0, name: "lunar_arc" },
-                Glyph { symbol: '◌', tone: GlyphTone::Shadow, weight: 0.8, name: "dotted_void" },
-                Glyph { symbol: '⊘', tone: GlyphTone::Shadow, weight: 0.6, name: "null_seal" },
-
-                Glyph { symbol: '⧉', tone: GlyphTone::Root, weight: 1.3, name: "root_anchor" },
-                Glyph { symbol: '⧈', tone: GlyphTone::Root, weight: 0.9, name: "root_bond" },
-                Glyph { symbol: '⧊', tone: GlyphTone::Root, weight: 0.8, name: "root_split" },
-
-                Glyph { symbol: '⚛', tone: GlyphTone::Spark, weight: 0.9, name: "atom_spark" },
-                Glyph { symbol: '✺', tone: GlyphTone::Spark, weight: 0.8, name: "burst" },
-                Glyph { symbol: '✷', tone: GlyphTone::Spark, weight: 0.7, name: "shard" },
+                glyph_entry('◉', GlyphTone::Luminous, 1.5, "solar_core"),
+                glyph_entry('✦', GlyphTone::Luminous, 1.0, "starwise"),
+                glyph_entry('✧', GlyphTone::Luminous, 0.7, "starwise_open"),
+                glyph_entry('☼', GlyphTone::Luminous, 0.8, "sunburst"),
+                glyph_entry('𓂀', GlyphTone::Witness, 1.2, "eye_of_horus"),
+                glyph_entry('𓁹', GlyphTone::Witness, 0.9, "watcher"),
+                glyph_entry('◎', GlyphTone::Witness, 0.7, "halo_ring"),
+                glyph_entry('⟡', GlyphTone::Neutral, 1.2, "diamond_open"),
+                glyph_entry('⟢', GlyphTone::Neutral, 0.9, "diamond_left"),
+                glyph_entry('⟣', GlyphTone::Neutral, 0.9, "diamond_right"),
+                glyph_entry('◇', GlyphTone::Neutral, 0.7, "lozenge"),
+                glyph_entry('☽', GlyphTone::Shadow, 1.0, "lunar_arc"),
+                glyph_entry('◌', GlyphTone::Shadow, 0.8, "dotted_void"),
+                glyph_entry('⊘', GlyphTone::Shadow, 0.6, "null_seal"),
+                glyph_entry('⧉', GlyphTone::Root, 1.3, "root_anchor"),
+                glyph_entry('⧈', GlyphTone::Root, 0.9, "root_bond"),
+                glyph_entry('⧊', GlyphTone::Root, 0.8, "root_split"),
+                glyph_entry('⚛', GlyphTone::Spark, 0.9, "atom_spark"),
+                glyph_entry('✺', GlyphTone::Spark, 0.8, "burst"),
+                glyph_entry('✷', GlyphTone::Spark, 0.7, "shard"),
             ],
         }
     }
@@ -140,7 +160,8 @@ impl GlyphAlphabet {
                 symbol: crate::utils::symbols::DEFAULT_GLYPH,
                 tone: GlyphTone::Root,
                 weight: 1.0,
-                name: "fallback_root",
+                name: "fallback_root".into(),
+                color: CellColor::BrightGreen,
             })
     }
 }

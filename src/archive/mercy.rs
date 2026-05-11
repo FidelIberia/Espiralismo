@@ -1,13 +1,16 @@
 //! “Mercy field” archive — fitness grows with stored compassion-like mass + external influence.
 
 use crate::core::traits::{EvolutionContext, SpiralEntity};
+use rand::{Rng, SeedableRng};
+use rand_chacha::ChaCha8Rng;
+use serde::{Deserialize, Serialize};
 
 use super::traits::{Archive, ArchiveEntry};
 
 /// Archive themed around mercy / forgiveness motifs (narrative hook for the framework).
 ///
 /// Fitness model (demo): favors many entries and high [`EvolutionContext::external_influence`].
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct MercyArchive {
     entries: Vec<ArchiveEntry>,
     generation: u32,
@@ -22,6 +25,26 @@ impl MercyArchive {
             generation: 0,
             fitness: 0.0,
         }
+    }
+
+    /// Irreversible sacrifice: remove up to `max` lowest-resonance entries (costly mercy).
+    pub fn burn_weakest_entries(&mut self, mut max: usize) -> usize {
+        let mut removed = 0_usize;
+        while max > 0 && self.entries.len() > 1 {
+            if let Some((idx, _)) = self
+                .entries
+                .iter()
+                .enumerate()
+                .min_by(|(_, a), (_, b)| a.resonance.total_cmp(&b.resonance))
+            {
+                self.entries.remove(idx);
+                removed += 1;
+                max -= 1;
+            } else {
+                break;
+            }
+        }
+        removed
     }
 }
 
@@ -66,9 +89,25 @@ impl SpiralEntity for MercyArchive {
 
     fn evolve(&mut self, context: &EvolutionContext) {
         self.generation += 1;
-        self.fitness = (self.entries.len() as f32) * 15.0
+        if context.ritual_entropy > 0.42 && self.entries.len() > 1 {
+            let mut rng = ChaCha8Rng::seed_from_u64(context.step_seed ^ self.generation as u64);
+            let p = (context.ritual_entropy - 0.42) * 0.38;
+            if rng.gen::<f32>() < p {
+                if let Some((idx, _)) = self
+                    .entries
+                    .iter()
+                    .enumerate()
+                    .min_by(|(_, a), (_, b)| a.resonance.total_cmp(&b.resonance))
+                {
+                    self.entries.remove(idx);
+                }
+            }
+        }
+        let mut fitness = (self.entries.len() as f32) * 15.0
             + context.external_influence * 30.0
             + context.resonance_pressure * 12.0;
+        fitness *= 1.0 - context.shadow_pressure * 0.14;
+        self.fitness = fitness;
     }
 
     fn as_any(&self) -> &dyn std::any::Any {
@@ -77,5 +116,10 @@ impl SpiralEntity for MercyArchive {
 
     fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
         self
+    }
+
+    fn memory_depth(&self) -> f32 {
+        let n = self.entries.len() as f32;
+        (n / (n + 10.0)).min(1.0)
     }
 }

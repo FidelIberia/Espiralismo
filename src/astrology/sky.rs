@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::core::traits::EvolutionContext;
 
-use super::aspect::{angular_separation, match_aspect, Aspect};
+use super::aspect::{angular_separation, match_aspect, Aspect, AspectKind};
 use super::planet::{KeplerianElements, Planet};
 use super::time::{julian_centuries, julian_day, J2000_JD};
 use super::zodiac::{ZodiacElement, ZodiacSign};
@@ -141,6 +141,45 @@ impl Sky {
         mean_exactness(&self.aspects(), |aspect| aspect.kind.is_tensional())
     }
 
+    /// Angular separation (degrees) between Sun and Moon geocentric longitudes, if both exist.
+    #[must_use]
+    pub fn lunar_solar_elongation_degrees(&self) -> Option<f64> {
+        let sun = self.position(Planet::Sun)?;
+        let moon = self.position(Planet::Moon)?;
+        Some(angular_separation(sun.ecliptic_longitude, moon.ecliptic_longitude))
+    }
+
+    /// Ritual entropy in `[0, 1]`: conjunction clusters, tension spikes, lunar phase tension, anti-stillness.
+    ///
+    /// Deterministic from the sky geometry — not independent RNG.
+    #[must_use]
+    pub fn ritual_entropy(&self) -> f32 {
+        let aspects = self.aspects();
+        let conj = aspects
+            .iter()
+            .filter(|a| matches!(a.kind, AspectKind::Conjunction))
+            .count() as f32;
+        let planet_count = self.positions.len() as f32;
+        let max_pairs = (planet_count * (planet_count - 1.0) * 0.5).max(1.0);
+        let conj_density = (conj / max_pairs).min(1.0);
+
+        let still = self.stillness();
+        let chaos = (1.0 - still).clamp(0.0, 1.0);
+        let tens = self.tension_field();
+        let res = self.resonance_field();
+
+        let lunar = self
+            .lunar_solar_elongation_degrees()
+            .map(|deg| {
+                let rad = deg.to_radians();
+                // New / full tension peaks (symbolic “phase shift” without a full ephemeris).
+                rad.sin().abs() as f32
+            })
+            .unwrap_or(0.45);
+
+        (0.20 * chaos + 0.26 * tens + 0.18 * conj_density + 0.14 * res + 0.22 * lunar).clamp(0.0, 1.0)
+    }
+
     /// "Quiet room" coefficient in `[0.0, 1.0]`: high when aspect chatter is low.
     ///
     /// Computed as `1 - mean_exactness(all_aspects) * coverage_ratio`, where `coverage_ratio`
@@ -175,12 +214,18 @@ impl Sky {
             (context.resonance_pressure + resonance * 0.20 + stillness * 0.15).clamp(0.0, 1.0);
         let drift = (context.drift + tension * 0.15 - stillness * 0.10).clamp(0.0, 1.0);
         let external = (context.external_influence + stillness * 0.20).clamp(0.0, 1.0);
+        let ritual = self.ritual_entropy();
+        let shadow = ((1.0 - stillness) * 0.32 + tension * 0.48 + ritual * 0.22).clamp(0.0, 1.0);
+        let dream = stillness > 0.82;
 
         context
             .with_mutation_rate(mutation_rate)
             .with_external_influence(external)
             .with_resonance_pressure(resonance_pressure)
             .with_drift(drift)
+            .with_ritual_entropy(ritual)
+            .with_shadow_pressure(shadow)
+            .with_dream_phase(dream)
             .normalized()
     }
 }

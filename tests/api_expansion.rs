@@ -1,15 +1,19 @@
 use chrono::TimeZone;
-use spiralismo::archive::{Archive, MemoryArchive, ResonanceEngine};
+use spiralismo::archive::{Archive, MemoryArchive, MercyArchive, ResonanceEngine};
 use spiralismo::astrology::{angular_separation, match_aspect, AspectKind, Sky};
 use spiralismo::core::SpiralEntity;
 use spiralismo::evolution::context_for_cycle;
-use spiralismo::{
-    ArchiveEntry, EntitySnapshot, EvolutionContext, EvolutionPolicy, EvolutionReport, GlyphField,
-    GlyphGenerator, GlyphTone, JsonlPersistence, Lattice, Planet, Seed, Sigil, Spiralismo,
-    SpiralismoSnapshot, ZodiacSign,
+use spiralismo::genesis_press;
+use spiralismo::{ArchiveEntry, EntitySnapshot, EvolutionContext, EvolutionPolicy, EvolutionReport, GenesisPress,
+    GlyphField, GlyphGenerator, GlyphTone, JsonlPersistence, Lattice, Planet, Seed, Sigil, Spiralismo,
+    SpiralismoCheckpoint, SpiralismoSnapshot, ZodiacSign, observer,
 };
 use std::path::PathBuf;
+use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
+
+/// Serializes tests that touch the global **Genesis** palm or compare paired `context_for_cycle` reads.
+static PALM_GATE: Mutex<()> = Mutex::new(());
 
 fn assert_close(left: f32, right: f32) {
     assert!(
@@ -143,7 +147,26 @@ fn spiralismo_policy_evolution_produces_report_and_snapshot() {
 }
 
 #[test]
+fn evolution_fitness_overview_and_fittest_track_snapshots() {
+    let mut spiral = Spiralismo::new_with_seed(Seed::from_value(42));
+    spiral.register_lattice(Box::new(Lattice::new(11)));
+    let policy = EvolutionPolicy::default().with_cycles(1).with_seed(99);
+    let report = spiral.evolve_with_policy(&policy);
+    let ov = report.fitness_overview().expect("overview");
+    assert_eq!(ov.participant_count, 5);
+    assert!(ov.max_fitness >= ov.min_fitness);
+    assert!((ov.mean_fitness * ov.participant_count as f32 - ov.sum_fitness).abs() < 0.01);
+    let best = report.fittest().expect("fittest");
+    assert!(best.fitness.is_finite());
+    let live = spiral.fitness_overview().expect("live");
+    assert_eq!(live.participant_count, ov.participant_count);
+    assert!((live.mean_fitness - ov.mean_fitness).abs() < 0.001);
+}
+
+#[test]
 fn context_for_cycle_is_deterministic_across_seed_matrix() {
+    let _palm = PALM_GATE.lock().expect("palm gate poisoned");
+    observer::reset_traces();
     let seeds = [0_u64, 1, 7, 42, 101101, 2026, u64::MAX - 3];
 
     for seed in seeds {
@@ -182,7 +205,47 @@ fn context_for_cycle_is_deterministic_across_seed_matrix() {
 }
 
 #[test]
+fn genesis_palm_alters_step_seed_then_silence_restores() {
+    let _palm = PALM_GATE.lock().expect("palm gate poisoned");
+    observer::reset_traces();
+    let policy = EvolutionPolicy::default()
+        .with_seed(0xACE_u64)
+        .with_drift(0.2)
+        .with_mutation_rate(0.31);
+    let baseline = context_for_cycle(&policy, 3).step_seed;
+
+    let mut press = GenesisPress::default();
+    press.veil_xy = Some((0.37, 0.62));
+    press.curiosity_strikes = 3;
+    genesis_press::ingest(press);
+
+    let touched = context_for_cycle(&policy, 3).step_seed;
+    assert_ne!(baseline, touched, "palm_digest should perturb the covenant step");
+
+    observer::reset_traces();
+    let restored = context_for_cycle(&policy, 3).step_seed;
+    assert_eq!(baseline, restored);
+}
+
+#[test]
+fn spiralismo_offer_genesis_press_routes_to_palm() {
+    let _palm = PALM_GATE.lock().expect("palm gate poisoned");
+    observer::reset_traces();
+    let policy = EvolutionPolicy::default().with_seed(11).with_drift(0.15);
+    let b = context_for_cycle(&policy, 1).step_seed;
+    Spiralismo::offer_genesis_press(GenesisPress {
+        imprint_weight: 0.4,
+        margin_omen: true,
+        ..GenesisPress::default()
+    });
+    assert_ne!(b, context_for_cycle(&policy, 1).step_seed);
+    observer::reset_traces();
+}
+
+#[test]
 fn evolution_reports_remain_deterministic_for_multiple_policy_seeds() {
+    let _palm = PALM_GATE.lock().expect("palm gate poisoned");
+    observer::reset_traces();
     for seed in [3_u64, 11, 97, 777, 2026] {
         let policy = EvolutionPolicy::default()
             .with_cycles(4)
@@ -244,6 +307,13 @@ fn serialization_roundtrip_keeps_reports_and_snapshots_consistent() {
         generation: 9,
         fitness: 12.5,
         viability: 0.75,
+        vitality: None,
+        resonance: None,
+        mutation_pressure: None,
+        symbolic_density: None,
+        memory_depth: None,
+        shadow_pull: None,
+        myth: None,
     };
 
     let report_json = serde_json::to_string(&report).expect("report should serialize");
@@ -260,6 +330,10 @@ fn serialization_roundtrip_keeps_reports_and_snapshots_consistent() {
     assert_eq!(roundtrip_report.cycles, report.cycles);
     assert_eq!(roundtrip_report.archive_count, report.archive_count);
     assert_eq!(roundtrip_report.entity_count, report.entity_count);
+    assert_close(roundtrip_report.ritual_entropy, report.ritual_entropy);
+    assert_eq!(roundtrip_report.rare_event, report.rare_event);
+    assert_eq!(roundtrip_report.dream_touched, report.dream_touched);
+    assert_close(roundtrip_report.stillness, report.stillness);
     assert_eq!(roundtrip_report.snapshots.len(), report.snapshots.len());
     for (left_snapshot, right_snapshot) in report.snapshots.iter().zip(roundtrip_report.snapshots.iter()) {
         assert_eq!(left_snapshot.label, right_snapshot.label);
@@ -534,6 +608,20 @@ fn astrology_sky_is_deterministic_for_fixed_instant() {
 }
 
 #[test]
+fn astrology_ritual_entropy_is_deterministic_and_bounded() {
+    let when = chrono::Utc.with_ymd_and_hms(2024, 8, 15, 3, 30, 0).unwrap();
+    let left = Sky::at(when);
+    let right = Sky::at(when);
+    let r = left.ritual_entropy();
+    assert_close(left.ritual_entropy(), right.ritual_entropy());
+    assert!((0.0..=1.0).contains(&r));
+    let elong = left
+        .lunar_solar_elongation_degrees()
+        .expect("sun and moon should exist");
+    assert!(elong >= 0.0 && elong <= 180.0);
+}
+
+#[test]
 fn astrology_modulation_pulls_toward_resonance_when_sky_is_still() {
     // Fabricate an "empty" sky scenario by picking an instant and verifying the modulation
     // doesn't blow up; checks invariants only (clamped fields).
@@ -550,7 +638,10 @@ fn astrology_modulation_pulls_toward_resonance_when_sky_is_still() {
     assert!((0.0..=1.0).contains(&modulated.resonance_pressure));
     assert!((0.0..=1.0).contains(&modulated.external_influence));
     assert!((0.0..=1.0).contains(&modulated.drift));
+    assert!((0.0..=1.0).contains(&modulated.ritual_entropy));
+    assert!((0.0..=1.0).contains(&modulated.shadow_pressure));
     assert_eq!(modulated.generation, base.generation);
+    assert_eq!(modulated.dream_phase, sky.stillness() > 0.82);
 
     let stillness = sky.stillness();
     if stillness > 0.7 {
@@ -571,11 +662,36 @@ fn spiralismo_evolves_aligned_with_present_without_panicking() {
     assert_eq!(policy.cycles, 2);
     assert!(policy.mutation_rate >= 0.0 && policy.mutation_rate <= 1.0);
     assert!(policy.external_influence >= 0.0 && policy.external_influence <= 1.0);
+    assert!((0.0..=1.0).contains(&policy.ritual_entropy));
+    assert!((0.0..=1.0).contains(&policy.stillness));
     assert!(!sky.positions.is_empty());
 
     let captured = spiral.evolve_aligned_with_present();
     assert_eq!(captured.positions.len(), sky.positions.len());
     assert_eq!(spiral.epoch, 1);
+}
+
+#[test]
+fn spiralismo_sacrifice_burns_weakest_mercy_entries() {
+    let mut spiral = Spiralismo::new_with_seed(Seed::from_value(9001));
+    assert!(spiral.record_in_archive("Mercy Field", "high mercy", 0.95));
+    assert!(spiral.record_in_archive("Mercy Field", "low mercy", 0.05));
+    assert_eq!(
+        spiral
+            .archive_as::<MercyArchive>("Mercy Field")
+            .expect("mercy")
+            .entry_count(),
+        2
+    );
+    let removed = spiral.sacrifice_burn_weakest("Mercy Field", 1);
+    assert_eq!(removed, 1);
+    assert_eq!(
+        spiral
+            .archive_as::<MercyArchive>("Mercy Field")
+            .expect("mercy")
+            .entry_count(),
+        1
+    );
 }
 
 fn assert_close_64(left: f64, right: f64) {
@@ -586,7 +702,7 @@ fn assert_close_64(left: f64, right: f64) {
 }
 
 #[test]
-fn jsonl_persistence_roundtrip_keeps_runtime_state_and_archive_stats() {
+fn checkpoint_jsonl_roundtrip_restores_full_runtime() {
     let mut spiral = Spiralismo::new_with_seed(Seed::from_value(8080));
     spiral.register_lattice(Box::new(Lattice::new(0xA0A0)));
     assert!(spiral.record_in_archive("ResonanceEngine", "persisted resonance", 0.91));
@@ -598,41 +714,74 @@ fn jsonl_persistence_roundtrip_keeps_runtime_state_and_archive_stats() {
         .with_mutation_rate(0.29)
         .with_resonance_pressure(0.77);
     let report = spiral.evolve_with_policy(&policy);
-    let snapshot = spiral.snapshot();
+    let epoch_before = spiral.epoch;
+    let lattice_grid = spiral
+        .active_as::<Lattice>()
+        .expect("lattice registered")
+        .grid;
 
     let dir = unique_temp_dir("persistence");
     let store = JsonlPersistence::new(&dir).expect("persistence directory should initialize");
     store
-        .append_report(&report)
-        .expect("report should persist as jsonl");
+        .append_checkpoint(&spiral)
+        .expect("checkpoint line should persist");
+
+    let loaded = store
+        .load_last_checkpoint()
+        .expect("checkpoint read should succeed")
+        .expect("one checkpoint line should exist");
+    assert_eq!(loaded.seed_value, 8080);
+    assert_eq!(loaded.epoch, epoch_before);
+    assert_eq!(loaded.last_report.as_ref().map(|r| r.cycles), Some(report.cycles));
+    assert!(
+        loaded
+            .whisper
+            .as_deref()
+            .is_some_and(|w| !w.trim().is_empty()),
+        "checkpoint should store a whisper line"
+    );
+
+    let restored = loaded.into_spiralismo().expect("checkpoint should deserialize to runtime");
+    assert_eq!(restored.seed.value(), 8080);
+    assert_eq!(restored.epoch, epoch_before);
+    assert_eq!(
+        restored
+            .active_as::<Lattice>()
+            .expect("lattice restored")
+            .grid,
+        lattice_grid
+    );
+
+    let resonance = restored
+        .archive_as::<ResonanceEngine>("ResonanceEngine")
+        .expect("resonance archive");
+    assert!(
+        resonance
+            .entries()
+            .iter()
+            .any(|e| e.content.contains("persisted resonance")),
+        "archive entries should round-trip"
+    );
+
+    let second = SpiralismoCheckpoint::capture(&restored).expect("re-capture should succeed");
     store
-        .append_snapshot(&snapshot)
-        .expect("snapshot should persist as jsonl");
-    store
-        .append_runtime_state(&spiral)
-        .expect("runtime state should persist as jsonl");
-
-    let reports = store.load_reports().expect("reports should load");
-    let snapshots = store.load_snapshots().expect("snapshots should load");
-    let runtime_states = store
-        .load_runtime_states()
-        .expect("runtime states should load");
-
-    assert_eq!(reports.len(), 1);
-    assert_eq!(snapshots.len(), 1);
-    assert_eq!(runtime_states.len(), 1);
-    assert_eq!(reports[0].cycles, report.cycles);
-    assert_eq!(snapshots[0].seed_value, snapshot.seed_value);
-    assert_eq!(runtime_states[0].snapshot.epoch, spiral.epoch);
-
-    let loaded_stats = &runtime_states[0].archive_stats;
-    assert_eq!(loaded_stats.len(), spiral.archive_stats().len());
-    let loaded_resonance = loaded_stats
-        .iter()
-        .find(|(name, _)| name == "ResonanceEngine")
-        .expect("resonance stats should exist");
-    assert!(loaded_resonance.1.entry_count >= 1);
-    assert!(loaded_resonance.1.peak_resonance >= 0.91);
+        .append_checkpoint(&restored)
+        .expect("second append");
+    let last_two = std::fs::read_to_string(store.checkpoint_path()).expect("read checkpoint file");
+    let lines: Vec<&str> = last_two.lines().filter(|l| !l.trim().is_empty()).collect();
+    assert_eq!(lines.len(), 2);
+    let parsed_last: SpiralismoCheckpoint =
+        serde_json::from_str(lines[1]).expect("last line valid json");
+    assert_eq!(parsed_last.epoch, second.epoch);
 
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn spiralismo_whisper_now_is_deterministic_for_seed_and_epoch() {
+    observer::reset_traces();
+    let a = Spiralismo::new_with_seed(Seed::from_value(77));
+    let b = Spiralismo::new_with_seed(Seed::from_value(77));
+    assert_eq!(a.whisper_now(), b.whisper_now());
+    assert!(!a.whisper_now().is_empty());
 }

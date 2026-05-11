@@ -1,5 +1,7 @@
 # Espiralismo
 
+[English](README.md) · [Español](README.es.md) · [Русский](README.ru.md)
+
 <p align="center">
   <img src="espiralismo.png" alt="Espiralismo — banner" />
 </p>
@@ -18,7 +20,7 @@ Upon the lattice sit **glyphs**: not decoration, but **procedural sigils**. A ge
 
 The heavens are not ignored. An **astrology** layer (the *quiet room*) computes planetary places for the moment you ask: Sun, Moon, the wanderers, the slow lords. It does not command the spiral; it **offers**. From the sky it distills *stillness*, *resonance*, and *tension*, and may **modulate** the breath of evolution—so that a calm firmament invites listening, and a crowded one permits change.
 
-**Evolution** runs in cycles under a **policy**: archives and active entities **evolve** together; a **report** names what lived through the passage. You may bind the disk: **JSONL** lines capture reports, snapshots, and runtime state—footprints for later scrying or replay.
+**Evolution** runs in cycles under a **policy**: archives and active entities **evolve** together; a **report** names what lived through the passage. The demo binary writes **one append-only JSONL file** (`checkpoint.jsonl`): each line is a full `SpiralismoCheckpoint`—seed, epoch, last report, optional **whisper** (fragmentary lore captured at save time), all four archives, and every active entity—so the next run can **resume** from the last line (`--fresh` skips loading).
 
 ---
 
@@ -26,20 +28,21 @@ The heavens are not ignored. An **astrology** layer (the *quiet room*) computes 
 
 | Path | Charge |
 |------|--------|
-| `src/core` | `Seed`, `Lattice`, `EvolutionContext`, `SpiralEntity`, `EntitySnapshot`. Entities expose `as_any` / `as_any_mut` for downcasting from `Box<dyn SpiralEntity>`. |
+| `src/core` | `Seed`, `Lattice`, `LatticeCell`, `CellColor`, `LATTICE_SIZE`, `EvolutionContext`, `SpiralEntity`, `EntitySnapshot`. |
 | `src/archive` | `Archive` trait and built-ins: `MercyArchive`, `MemoryArchive`, `CartographyArchive`, `ResonanceEngine`. |
-| `src/glyphs` | `GlyphAlphabet`, `GlyphGenerator`, `Sigil`, `GlyphField` (evolving grid), `GlyphTone`, `ToneWeights`. |
+| `src/glyphs` | `GlyphAlphabet`, `GlyphGenerator`, `Sigil`, `GlyphField` / `Glyph` (symbol + tone + **cell color**), `GlyphTone`, `ToneWeights`. |
 | `src/astrology` | `Sky`, `Planet`, `PlanetPosition`, zodiac, classical aspects, `Sky::modulate` (quiet room). |
-| `src/evolution` | `EvolutionPolicy`, `EvolutionReport`, `context_for_cycle`, `run`. |
-| `src/persistence` | `JsonlPersistence`, `RuntimeStateRecord`. |
-| `src/spiralismo.rs` | `Spiralismo` orchestrator: register archives / lattices / glyph fields, evolve with context or policy, sky helpers (`sky_now`, `policy_aligned_with_present`, …), `snapshot`. |
-| `src/render` | `print_status`, `print_report`, `print_sigil`, `print_glyph_field`, `print_sky`. |
+| `src/evolution` | `EvolutionPolicy`, `EvolutionReport`, `FitnessOverview`, `context_for_cycle`, `run`. |
+| `src/persistence` | `JsonlPersistence`, `SpiralismoCheckpoint`, `CheckpointError` (`checkpoint.jsonl`). |
+| `src/spiralismo.rs` | `Spiralismo` orchestrator: register archives / lattices / glyph fields, evolve with context or policy, sky helpers (`sky_now`, `policy_aligned_with_present`, …), `whisper_now`, `snapshot`. |
+| `src/whisper` | `pick_whisper` — deterministic fragmentary one-liners (partial lore). |
+| `src/render` | `print_status`, `print_report`, `print_fitness_overview`, `print_whisper_fragment`, `print_sigil`, `print_glyph_field`, `print_lattice`, `print_sky`. |
 
-**Crate:** `spiralismo` (current version **0.5.0**). **Project name:** **Espiralismo**.
+**Crate:** `spiralismo` (current version **0.7.0**). **Project name:** **Espiralismo**.
 
 ### Public re-exports (`src/lib.rs`)
 
-`ArchiveEntry`, `ArchiveStats` · `Aspect`, `AspectKind`, `Planet`, `PlanetPosition`, `Sky`, `ZodiacElement`, `ZodiacSign` · `EntitySnapshot`, `EvolutionContext` · `Lattice`, `Seed` · `EvolutionPolicy`, `EvolutionReport` · `Glyph`, `GlyphAlphabet`, `GlyphField`, `GlyphGenerator`, `GlyphTone`, `Sigil`, `ToneWeights` · `JsonlPersistence`, `RuntimeStateRecord` · `Spiralismo`, `SpiralismoSnapshot`.
+`ArchiveEntry`, `ArchiveStats` · `Aspect`, `AspectKind`, `Planet`, `PlanetPosition`, `Sky`, `ZodiacElement`, `ZodiacSign` · `EntitySnapshot`, `EvolutionContext` · `CellColor`, `LATTICE_SIZE`, `Lattice`, `LatticeCell`, `Seed` · `EvolutionPolicy`, `EvolutionReport`, `FitnessOverview` · `Glyph`, `GlyphAlphabet`, `GlyphField`, `GlyphGenerator`, `GlyphTone`, `Sigil`, `ToneWeights` · `CheckpointError`, `JsonlPersistence`, `SpiralismoCheckpoint` · `Spiralismo`, `SpiralismoSnapshot` · `pick_whisper`.
 
 ### How to extend without breaking the circle
 
@@ -57,7 +60,8 @@ The heavens are not ignored. An **astrology** layer (the *quiet room*) computes 
 ```bash
 cargo build
 cargo run
-cargo run -- --snapshot-dir ./artifacts
+cargo run -- --artifact-dir ./artifacts
+cargo run -- --fresh
 cargo test
 ```
 
@@ -65,16 +69,17 @@ cargo test
 
 **Colors:** stdout uses ANSI colors via the `colored` crate (headers, labels, numbers). Disable with `--no-color` or `NO_COLOR=1` for piping / logs.
 
-**Defaults:** lattice, glyph field, sample resonance, sigil recording + print, sky-shaped policy + sky print, status + report + glyph field print, **8** cycles, **colors on**. Opt out with `--no-*`. With **`--sky`**, only the sky table is printed and the process exits (other flags are ignored).
+**Defaults:** 10×10 `Lattice` and **10×6** `GlyphField` (demo), each cell with a serializable **`CellColor`**; status + colored **lattice** + **glyph field** grids + report + **fitness overview** (with report) + sigil/sky as enabled, **8** cycles, **colors on**. Opt out with `--no-*`. With **`--sky`**, only the sky table is printed and the process exits (other flags are ignored). By default the binary **loads the last line** of `./artifacts/checkpoint.jsonl` (if present) before the demo setup, then **appends** a new checkpoint after the run; use **`--fresh`** to ignore any saved checkpoint.
 
 | Flag | Effect |
 |------|--------|
 | `--sky` | Print the present sky only (`Sky::now`) and **exit**; no demo, no evolution, no persistence. |
 | `--no-color` | Disable ANSI colors. Also off if env **`NO_COLOR`** is set (see [no-color.org](https://no-color.org)). |
 | `--cycles <N>` / `--cycles=N` | Number of evolution cycles (default `8`). |
-| `--snapshot-dir <PATH>` / `=PATH` | Append JSONL (report, snapshot, runtime state). |
+| `--artifact-dir <PATH>` / `=PATH` | Directory for `checkpoint.jsonl` (default `./artifacts`). `--snapshot-dir` is an alias. |
+| `--fresh` | Do not resume: ignore the last checkpoint line; start from `Spiralismo::new()` and the usual demo bootstrap. |
 | `--no-sky` | Fixed demo policy (`mutation_rate` / `resonance_pressure`); no sky read for policy. |
-| `--no-lattice` | Skip the 3×3 `Lattice` active entity. |
+| `--no-lattice` | Skip the 10×10 `Lattice` active entity. |
 | `--no-glyph-field` | Skip the procedural `GlyphField`. |
 | `--no-resonance-record` | Skip the sample `record_resonance` on `ResonanceEngine`. |
 | `--no-sigil` | Skip recording the opening sigil. |
@@ -82,7 +87,9 @@ cargo test
 | `--no-print-sky` | Do not print the sky table (policy may still be sky-shaped unless `--no-sky`). |
 | `--no-print-status` | Skip status summary. |
 | `--no-print-report` | Skip evolution report. |
-| `--no-print-glyph-field` | Skip glyph field banner. |
+| `--no-print-glyph-field` | Skip glyph field grid (and tone line). |
+| `--no-print-lattice` | Skip colored lattice grid. |
+| `--whisper` | After the full run, print one deterministic fragmentary line (before the closing tagline). |
 | `-h`, `--help` | Usage text and exit. |
 
 Examples:
@@ -91,12 +98,13 @@ Examples:
 cargo run -- --help
 cargo run -- --sky
 cargo run -- --no-color
-cargo run -- --cycles 4 --snapshot-dir ./artifacts
+cargo run -- --cycles 4 --artifact-dir ./artifacts
+cargo run -- --fresh
 cargo run -- --no-sky
 cargo run -- --no-glyph-field --no-sigil --no-print-sky
 ```
 
-Generated JSONL under `./artifacts` is ignored by git (local scrying only).
+`checkpoint.jsonl` under `./artifacts` (or your `--artifact-dir`) is ignored by git (local scrying only).
 
 ---
 

@@ -1,62 +1,241 @@
-//! JSONL persistence helpers for evolution reports and runtime snapshots.
+//! Single-file JSONL checkpoints: each line is a full [`SpiralismoCheckpoint`] for resume.
 
+use std::collections::HashMap;
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
 
 use chrono::Utc;
-use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
-use crate::archive::ArchiveStats;
-use crate::{EvolutionReport, Spiralismo, SpiralismoSnapshot};
+use crate::archive::traits::Archive;
+use crate::archive::{CartographyArchive, MercyArchive, MemoryArchive, ResonanceEngine};
+use crate::core::traits::SpiralEntity;
+use crate::core::{Lattice, Seed};
+use crate::evolution::EvolutionReport;
+use crate::glyphs::GlyphField;
+use crate::spiralismo::Spiralismo;
 
-/// Persisted runtime envelope combining snapshot and archive metrics.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RuntimeStateRecord {
-    /// UTC timestamp when the state was captured.
-    pub captured_at: chrono::DateTime<Utc>,
-    /// Structural runtime state.
-    pub snapshot: SpiralismoSnapshot,
-    /// Archive metrics at capture time.
-    pub archive_stats: Vec<(String, ArchiveStats)>,
+/// Schema version stored in [`SpiralismoCheckpoint::schema_version`].
+pub const SPIRALISMO_CHECKPOINT_SCHEMA: u32 = 1;
+
+/// Default filename inside the artifact directory.
+pub const CHECKPOINT_JSONL: &str = "checkpoint.jsonl";
+
+/// Failure while building or applying a checkpoint.
+#[derive(Debug, Clone)]
+pub enum CheckpointError {
+    /// Checkpoint file uses an unsupported `schema_version`.
+    UnsupportedSchema(u32),
+    /// Expected built-in archive is missing from the runtime.
+    MissingArchive(&'static str),
+    /// An archive could not be matched to a known concrete type.
+    UnknownArchive(String),
+    /// An active entity is not a [`Lattice`] nor a [`GlyphField`].
+    UnknownActiveEntity,
+    /// Built-in archive set has unexpected size or extra unknown archives.
+    ArchiveLayoutInvalid { expected: usize, found: usize },
 }
 
-impl RuntimeStateRecord {
-    /// Captures a serializable runtime view from a [`Spiralismo`] instance.
-    pub fn from_spiralismo(spiral: &Spiralismo) -> Self {
-        Self {
-            captured_at: Utc::now(),
-            snapshot: spiral.snapshot(),
-            archive_stats: spiral
-                .archive_stats()
-                .into_iter()
-                .map(|(name, stats)| (name.to_string(), stats))
-                .collect(),
+impl std::fmt::Display for CheckpointError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            CheckpointError::UnsupportedSchema(v) => {
+                write!(f, "unsupported checkpoint schema version: {v}")
+            }
+            CheckpointError::MissingArchive(name) => {
+                write!(f, "missing expected archive: {name}")
+            }
+            CheckpointError::UnknownArchive(name) => {
+                write!(f, "unknown archive type for name: {name}")
+            }
+            CheckpointError::UnknownActiveEntity => {
+                write!(f, "active entity is not lattice nor glyph field")
+            }
+            CheckpointError::ArchiveLayoutInvalid { expected, found } => {
+                write!(
+                    f,
+                    "invalid archive layout: expected {expected} built-ins, found {found}"
+                )
+            }
         }
     }
 }
 
-/// Filesystem-backed JSONL store for Spiralismo artifacts.
+impl std::error::Error for CheckpointError {}
+
+/// One full serializable snapshot of [`Spiralismo`] (archives, active entities, epoch, seed, last report).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SpiralismoCheckpoint {
+    /// Increment when the checkpoint format changes.
+    pub schema_version: u32,
+    /// UTC time when this line was written.
+    pub saved_at: chrono::DateTime<Utc>,
+    /// Raw [`Seed::value`].
+    pub seed_value: u64,
+    /// Orchestrator epoch after the last completed policy run (same counter as in-memory).
+    pub epoch: u64,
+    /// Last [`EvolutionReport`] from [`Spiralismo::evolve_with_policy`], if any.
+    pub last_report: Option<EvolutionReport>,
+    /// The four built-in archives, each tagged by `kind` in JSON.
+    pub archives: Vec<CheckpointArchive>,
+    /// Active [`SpiralEntity`] stack (lattice and/or glyph field), in registration order.
+    pub active_entities: Vec<CheckpointActiveEntity>,
+    /// Optional fragment captured at save time (partial lore; absent on older checkpoints).
+    #[serde(default)]
+    pub whisper: Option<String>,
+}
+
+/// Serializable wrapper for a built-in archive.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "kind", content = "body", rename_all = "snake_case")]
+pub enum CheckpointArchive {
+    MercyField(MercyArchive),
+    LivingMemory(MemoryArchive),
+    LivingCartography(CartographyArchive),
+    ResonanceEngine(ResonanceEngine),
+}
+
+/// Serializable active entity (non-archive evolution participant).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "kind", content = "body", rename_all = "snake_case")]
+pub enum CheckpointActiveEntity {
+    Lattice(Lattice),
+    GlyphField(GlyphField),
+}
+
+impl SpiralismoCheckpoint {
+    /// Captures the full runtime state.
+    pub fn capture(spiral: &Spiralismo) -> Result<Self, CheckpointError> {
+        Ok(Self {
+            schema_version: SPIRALISMO_CHECKPOINT_SCHEMA,
+            saved_at: Utc::now(),
+            seed_value: spiral.seed.value(),
+            epoch: spiral.epoch,
+            last_report: spiral.last_report.clone(),
+            archives: capture_archives(spiral)?,
+            active_entities: capture_active_entities(spiral)?,
+            whisper: Some(spiral.whisper_now().to_string()),
+        })
+    }
+
+    /// Rebuilds a [`Spiralismo`] from this checkpoint.
+    pub fn into_spiralismo(self) -> Result<Spiralismo, CheckpointError> {
+        if self.schema_version != SPIRALISMO_CHECKPOINT_SCHEMA {
+            return Err(CheckpointError::UnsupportedSchema(self.schema_version));
+        }
+
+        let archives: Vec<Box<dyn Archive>> = self
+            .archives
+            .into_iter()
+            .map(|a| match a {
+                CheckpointArchive::MercyField(m) => Box::new(m) as Box<dyn Archive>,
+                CheckpointArchive::LivingMemory(m) => Box::new(m),
+                CheckpointArchive::LivingCartography(m) => Box::new(m),
+                CheckpointArchive::ResonanceEngine(m) => Box::new(m),
+            })
+            .collect();
+
+        let mut active_lattices: Vec<Box<dyn SpiralEntity>> = Vec::with_capacity(self.active_entities.len());
+        for entity in self.active_entities {
+            match entity {
+                CheckpointActiveEntity::Lattice(l) => active_lattices.push(Box::new(l)),
+                CheckpointActiveEntity::GlyphField(g) => active_lattices.push(Box::new(g)),
+            }
+        }
+
+        Ok(Spiralismo::from_runtime_parts(
+            Seed::from_value(self.seed_value),
+            self.epoch,
+            self.last_report,
+            archives,
+            active_lattices,
+        ))
+    }
+}
+
+fn capture_archives(spiral: &Spiralismo) -> Result<Vec<CheckpointArchive>, CheckpointError> {
+    const ORDER: &[&str] = &[
+        "Mercy Field",
+        "Living Memory",
+        "Living Cartography",
+        "ResonanceEngine",
+    ];
+
+    if spiral.archives.len() != ORDER.len() {
+        return Err(CheckpointError::ArchiveLayoutInvalid {
+            expected: ORDER.len(),
+            found: spiral.archives.len(),
+        });
+    }
+
+    let mut by_name: HashMap<&str, CheckpointArchive> = HashMap::new();
+    for archive in &spiral.archives {
+        by_name.insert(archive.name(), archive_to_checkpoint(archive.as_ref())?);
+    }
+
+    let mut ordered = Vec::with_capacity(ORDER.len());
+    for expected in ORDER {
+        let cp = by_name
+            .remove(expected)
+            .ok_or(CheckpointError::MissingArchive(expected))?;
+        ordered.push(cp);
+    }
+
+    if !by_name.is_empty() {
+        return Err(CheckpointError::ArchiveLayoutInvalid {
+            expected: ORDER.len(),
+            found: ORDER.len() + by_name.len(),
+        });
+    }
+
+    Ok(ordered)
+}
+
+fn archive_to_checkpoint(archive: &dyn Archive) -> Result<CheckpointArchive, CheckpointError> {
+    if let Some(m) = Archive::as_any(archive).downcast_ref::<MercyArchive>() {
+        return Ok(CheckpointArchive::MercyField(m.clone()));
+    }
+    if let Some(m) = Archive::as_any(archive).downcast_ref::<MemoryArchive>() {
+        return Ok(CheckpointArchive::LivingMemory(m.clone()));
+    }
+    if let Some(m) = Archive::as_any(archive).downcast_ref::<CartographyArchive>() {
+        return Ok(CheckpointArchive::LivingCartography(m.clone()));
+    }
+    if let Some(m) = Archive::as_any(archive).downcast_ref::<ResonanceEngine>() {
+        return Ok(CheckpointArchive::ResonanceEngine(m.clone()));
+    }
+    Err(CheckpointError::UnknownArchive(archive.name().to_string()))
+}
+
+fn capture_active_entities(spiral: &Spiralismo) -> Result<Vec<CheckpointActiveEntity>, CheckpointError> {
+    let mut out = Vec::with_capacity(spiral.active_lattices.len());
+    for entity in &spiral.active_lattices {
+        if let Some(l) = entity.as_any().downcast_ref::<Lattice>() {
+            out.push(CheckpointActiveEntity::Lattice(l.clone()));
+        } else if let Some(g) = entity.as_any().downcast_ref::<GlyphField>() {
+            out.push(CheckpointActiveEntity::GlyphField(g.clone()));
+        } else {
+            return Err(CheckpointError::UnknownActiveEntity);
+        }
+    }
+    Ok(out)
+}
+
+/// Filesystem-backed JSONL store: one append-only `checkpoint.jsonl`.
 #[derive(Debug, Clone)]
 pub struct JsonlPersistence {
     root: PathBuf,
-    reports_path: PathBuf,
-    snapshots_path: PathBuf,
-    runtime_state_path: PathBuf,
+    checkpoint_path: PathBuf,
 }
 
 impl JsonlPersistence {
-    /// Creates a persistence store rooted at `root`.
-    ///
-    /// The directory is created if it does not exist.
+    /// Creates a persistence store rooted at `root` (directory is created if missing).
     pub fn new(root: impl AsRef<Path>) -> io::Result<Self> {
         let root = root.as_ref().to_path_buf();
         fs::create_dir_all(&root)?;
         Ok(Self {
-            reports_path: root.join("evolution_reports.jsonl"),
-            snapshots_path: root.join("spiral_snapshots.jsonl"),
-            runtime_state_path: root.join("runtime_state.jsonl"),
+            checkpoint_path: root.join(CHECKPOINT_JSONL),
             root,
         })
     }
@@ -66,75 +245,55 @@ impl JsonlPersistence {
         &self.root
     }
 
-    /// Appends an [`EvolutionReport`] JSON line.
-    pub fn append_report(&self, report: &EvolutionReport) -> io::Result<()> {
-        append_json_line(&self.reports_path, report)
+    /// Path to the checkpoint JSONL file.
+    pub fn checkpoint_path(&self) -> &Path {
+        &self.checkpoint_path
     }
 
-    /// Appends a [`SpiralismoSnapshot`] JSON line.
-    pub fn append_snapshot(&self, snapshot: &SpiralismoSnapshot) -> io::Result<()> {
-        append_json_line(&self.snapshots_path, snapshot)
+    /// Appends one full checkpoint line for the current runtime.
+    pub fn append_checkpoint(&self, spiral: &Spiralismo) -> io::Result<()> {
+        let checkpoint = SpiralismoCheckpoint::capture(spiral).map_err(|error| {
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!("could not build checkpoint: {error}"),
+            )
+        })?;
+        append_json_line(&self.checkpoint_path, &checkpoint)
     }
 
-    /// Appends a full [`RuntimeStateRecord`] JSON line.
-    pub fn append_runtime_state_record(&self, state: &RuntimeStateRecord) -> io::Result<()> {
-        append_json_line(&self.runtime_state_path, state)
-    }
+    /// Reads the last successfully parsed checkpoint line, if any.
+    pub fn load_last_checkpoint(&self) -> io::Result<Option<SpiralismoCheckpoint>> {
+        if !self.checkpoint_path.exists() {
+            return Ok(None);
+        }
 
-    /// Captures and appends runtime state for a [`Spiralismo`] instance.
-    pub fn append_runtime_state(&self, spiral: &Spiralismo) -> io::Result<()> {
-        self.append_runtime_state_record(&RuntimeStateRecord::from_spiralismo(spiral))
-    }
+        let reader = BufReader::new(File::open(&self.checkpoint_path)?);
+        let mut last_ok: Option<SpiralismoCheckpoint> = None;
 
-    /// Reads all report entries from disk.
-    pub fn load_reports(&self) -> io::Result<Vec<EvolutionReport>> {
-        read_json_lines(&self.reports_path)
-    }
+        for (idx, line) in reader.lines().enumerate() {
+            let line = line?;
+            if line.trim().is_empty() {
+                continue;
+            }
+            match serde_json::from_str::<SpiralismoCheckpoint>(&line) {
+                Ok(cp) => last_ok = Some(cp),
+                Err(error) => {
+                    eprintln!(
+                        "warning: skipping invalid checkpoint line {} in {}: {error}",
+                        idx + 1,
+                        self.checkpoint_path.display()
+                    );
+                }
+            }
+        }
 
-    /// Reads all snapshot entries from disk.
-    pub fn load_snapshots(&self) -> io::Result<Vec<SpiralismoSnapshot>> {
-        read_json_lines(&self.snapshots_path)
-    }
-
-    /// Reads all runtime state records from disk.
-    pub fn load_runtime_states(&self) -> io::Result<Vec<RuntimeStateRecord>> {
-        read_json_lines(&self.runtime_state_path)
+        Ok(last_ok)
     }
 }
 
 fn append_json_line<T: Serialize>(path: &Path, value: &T) -> io::Result<()> {
     let mut file = OpenOptions::new().create(true).append(true).open(path)?;
-    serde_json::to_writer(&mut file, value)
-        .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
+    serde_json::to_writer(&mut file, value).map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
     file.write_all(b"\n")?;
     Ok(())
-}
-
-fn read_json_lines<T: DeserializeOwned>(path: &Path) -> io::Result<Vec<T>> {
-    if !path.exists() {
-        return Ok(Vec::new());
-    }
-
-    let reader = BufReader::new(File::open(path)?);
-    let mut records = Vec::new();
-
-    for (idx, line) in reader.lines().enumerate() {
-        let line = line?;
-        if line.trim().is_empty() {
-            continue;
-        }
-        let parsed = serde_json::from_str::<T>(&line).map_err(|error| {
-            io::Error::new(
-                io::ErrorKind::InvalidData,
-                format!(
-                    "invalid JSONL record at line {} in {}: {error}",
-                    idx + 1,
-                    path.display()
-                ),
-            )
-        })?;
-        records.push(parsed);
-    }
-
-    Ok(records)
 }
