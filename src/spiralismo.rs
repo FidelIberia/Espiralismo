@@ -1,5 +1,7 @@
 //! Root orchestrator type for the Spiralismo runtime.
 
+use colored::Colorize;
+
 use crate::archive::traits::{Archive, ArchiveEntry, ArchiveStats};
 use crate::astrology::Sky;
 use crate::core::traits::{EntitySnapshot, EvolutionContext, SpiralEntity};
@@ -71,7 +73,12 @@ impl Spiralismo {
 
     /// Adds an archive to the runtime and logs registration.
     pub fn register_archive(&mut self, archive: Box<dyn Archive>) {
-        println!("⟦ Archive registered: {} ⟧", archive.name());
+        println!(
+            "{}",
+            format!("⟦ Archive registered: {} ⟧", archive.name())
+                .bright_blue()
+                .italic()
+        );
         self.archives.push(archive);
     }
 
@@ -217,7 +224,12 @@ impl Spiralismo {
     pub fn evolve_all(&mut self, generations: u32) {
         let policy = EvolutionPolicy::default().with_cycles(generations);
         self.evolve_with_policy(&policy);
-        println!("⟦ All archives evolved for {} generations ⟧", generations);
+        println!(
+            "{}",
+            format!("⟦ All archives evolved for {} generations ⟧", generations)
+                .bright_blue()
+                .italic()
+        );
     }
 
     /// Last evolution report, if any.

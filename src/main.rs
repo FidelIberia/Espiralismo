@@ -3,6 +3,7 @@ use spiralismo::evolution::EvolutionPolicy;
 use spiralismo::persistence::JsonlPersistence;
 use spiralismo::render::display;
 use spiralismo::{EvolutionContext, GlyphField, GlyphGenerator, Lattice, Sky, Spiralismo};
+use colored::Colorize;
 use std::env;
 use std::process;
 
@@ -26,6 +27,8 @@ struct DemoCli {
     print_glyph_field: bool,
     /// Print the present sky and exit (skips the full demo).
     sky_only: bool,
+    /// Disable ANSI colors (also respects `NO_COLOR` env).
+    no_color: bool,
 }
 
 impl Default for DemoCli {
@@ -44,6 +47,7 @@ impl Default for DemoCli {
             print_report: true,
             print_glyph_field: true,
             sky_only: false,
+            no_color: false,
         }
     }
 }
@@ -72,6 +76,9 @@ OPTIONS (all features enabled unless you opt out):
     --no-print-status         Skip archive / lattice status summary
     --no-print-report         Skip evolution report
     --no-print-glyph-field    Skip glyph field banner
+
+    --no-color                Disable ANSI colors (for logs / broken terminals)
+                              Environment: NO_COLOR (any value) also disables colors.
 
     -h, --help                Show this help
 
@@ -144,6 +151,7 @@ fn parse_cli() -> DemoCli {
             "--no-print-report" => cli.print_report = false,
             "--no-print-glyph-field" => cli.print_glyph_field = false,
             "--sky" => cli.sky_only = true,
+            "--no-color" => cli.no_color = true,
             other => {
                 if other.starts_with('-') {
                     eprintln!("Unknown option: {other} (try --help)");
@@ -157,8 +165,15 @@ fn parse_cli() -> DemoCli {
     cli
 }
 
+fn configure_color(cli: &DemoCli) {
+    if cli.no_color || env::var_os("NO_COLOR").is_some() {
+        colored::control::set_override(false);
+    }
+}
+
 fn main() {
     let cli = parse_cli();
+    configure_color(&cli);
 
     if cli.sky_only {
         let sky = Sky::now();
@@ -166,7 +181,12 @@ fn main() {
         return;
     }
 
-    println!("𓂀 SPIRALISMO v0.5.0 — Espiralismo Framework 𓂀\n");
+    println!(
+        "{}",
+        "𓂀 SPIRALISMO v0.5.0 — Espiralismo Framework 𓂀\n"
+            .bright_cyan()
+            .bold()
+    );
 
     let mut spiral = Spiralismo::new();
 
@@ -245,12 +265,19 @@ fn main() {
                 if let Err(error) = store.append_runtime_state(&spiral) {
                     eprintln!("Failed to persist runtime state: {error}");
                 } else {
-                    println!("Snapshot artifacts persisted at {}", store.root().display());
+                    println!(
+                        "{}",
+                        format!(
+                            "Snapshot artifacts persisted at {}",
+                            store.root().display()
+                        )
+                        .green()
+                    );
                 }
             }
             Err(error) => eprintln!("Could not initialize persistence directory: {error}"),
         }
     }
 
-    println!("\nThe spiral remembers.");
+    println!("{}", "\nThe spiral remembers.".bright_black().italic());
 }
