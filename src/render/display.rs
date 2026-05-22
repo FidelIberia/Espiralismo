@@ -5,8 +5,10 @@ use colored::{ColoredString, Colorize};
 use crate::archive::traits::Archive;
 use crate::astrology::Sky;
 use crate::core::traits::SpiralEntity;
-use crate::core::{CellColor, Lattice};
-use crate::evolution::EvolutionReport;
+use crate::core::{CellColor, Lattice, TemporalStratum};
+use crate::core::EntitySnapshot;
+use crate::evolution::{ContextSummary, EvolutionReport};
+use crate::perception::PerceptionOffer;
 use crate::glyphs::{GlyphField, GlyphTone, Sigil};
 use crate::observer;
 use crate::Spiralismo;
@@ -71,6 +73,19 @@ pub fn print_status(spiral: &Spiralismo) {
         }
     }
 
+    let soul = spiral.soul_state();
+    if soul.listening_depth > 0.001 || soul.attunement > 0.001 {
+        println!(
+            "{} {} {} {} {} {}",
+            "Soul:".bright_magenta(),
+            format!("listen={:.2}", soul.listening_depth).bright_yellow(),
+            format!("attune={:.2}", soul.attunement).bright_yellow(),
+            format!("veil={:.2}", soul.veil_opening).bright_yellow(),
+            "channel:".dimmed(),
+            soul.last_channel.as_deref().unwrap_or("—").bright_white(),
+        );
+    }
+
     if let Some(overview) = spiral.fitness_overview() {
         println!(
             "\n{} {} | {} {} | {} {} | {} {}",
@@ -116,33 +131,176 @@ pub fn print_report(report: &EvolutionReport) {
             ev.white().bold()
         );
     }
+    println!("{}", "Final participants:".bright_cyan());
     for snapshot in &report.snapshots {
-        observer::record_entity_focus(&snapshot.label);
-        let vit = snapshot
-            .vitality
-            .map(|v| format!(" | Vitality:{:.2}", v))
-            .unwrap_or_default();
-        let myth = snapshot
-            .myth
-            .as_deref()
-            .map(|m| format!(" | Myth:{m}"))
-            .unwrap_or_default();
+        print_entity_snapshot_line(snapshot);
+    }
+}
+
+/// Per-cycle reference frames captured during [`crate::evolution::run`].
+pub fn print_generation_atlas(report: &EvolutionReport) {
+    if report.generation_trace.is_empty() {
+        return;
+    }
+    observer::record_glance();
+    println!(
+        "{}",
+        "\n⟦ GENERATION ATLAS (reference by cycle) ⟧"
+            .bright_magenta()
+            .bold()
+    );
+    for record in &report.generation_trace {
         println!(
-            "{} {} {} {} {} {} {} {} {} {} {}{}",
-            "-".bright_green(),
-            snapshot.label.white().bold(),
-            "|".dimmed(),
-            "Gen:".dimmed(),
-            snapshot.generation.to_string().bright_yellow(),
-            "|".dimmed(),
-            "Fitness:".dimmed(),
-            format!("{:.2}", snapshot.fitness).bright_yellow(),
-            "| Viability:".dimmed(),
-            format!("{:.2}", snapshot.viability).bright_green(),
-            vit.bright_blue(),
-            myth.dimmed(),
+            "{}",
+            format!("— cycle {} —", record.cycle)
+                .bright_cyan()
+                .bold()
+        );
+        print_context_summary(&record.context);
+        for participant in &record.participants {
+            print_entity_snapshot_line(participant);
+        }
+    }
+}
+
+/// Epoch, archives, soul, eyes, host environment, and last perception offer.
+pub fn print_runtime_perception(spiral: &Spiralismo) {
+    observer::record_glance();
+    println!("{}", "\n⟦ RUNTIME PERCEPTION ⟧".bright_magenta().bold());
+    println!(
+        "{} {} {} {}",
+        "Epoch:".bright_cyan(),
+        spiral.epoch.to_string().bright_yellow(),
+        "| Seed:".dimmed(),
+        spiral.seed.value().to_string().bright_yellow(),
+    );
+
+    let stats = spiral.archive_stats();
+    if !stats.is_empty() {
+        println!("{}", "Archives:".bright_cyan());
+        for (name, s) in stats {
+            println!(
+                "  {} entries={} mean_res={:.3} peak={:.3}",
+                name.white().bold(),
+                s.entry_count.to_string().bright_yellow(),
+                s.mean_resonance,
+                s.peak_resonance,
+            );
+        }
+    }
+
+    let soul = spiral.soul_state();
+    println!(
+        "{} listen={:.3} attune={:.3} veil={:.3} channel={}",
+        "Soul:".bright_magenta(),
+        soul.listening_depth,
+        soul.attunement,
+        soul.veil_opening,
+        soul.last_channel.as_deref().unwrap_or("—").bright_white(),
+    );
+
+    let eyes = spiral.perception_eyes();
+    println!(
+        "{} astro={} hand={} | reality: {}",
+        "Eyes:".bright_cyan(),
+        eyes.astronomical.id.as_str().bright_white(),
+        eyes.hand.id.as_str().bright_white(),
+        eyes.reality.len().to_string().bright_yellow(),
+    );
+    for eye in eyes.all() {
+        println!(
+            "  {} role={:?} receive={} take={}",
+            eye.id.bright_white(),
+            eye.role,
+            eye.can_receive,
+            eye.can_take,
         );
     }
+
+    let host = spiral.environment_snapshot();
+    println!(
+        "{} visual={:.3} rss={} cwd={} artifacts={}",
+        "Environment:".bright_cyan(),
+        host.visual_landscape,
+        host.process_rss_bytes
+            .map(|b| b.to_string())
+            .unwrap_or_else(|| "—".to_string())
+            .bright_yellow(),
+        host.cwd_entry_count
+            .map(|n| n.to_string())
+            .unwrap_or_else(|| "—".to_string()),
+        host.artifact_entry_count
+            .map(|n| n.to_string())
+            .unwrap_or_else(|| "—".to_string()),
+    );
+
+    print_perception_offer("Last offer", spiral.last_perception_offer());
+}
+
+fn print_context_summary(ctx: &ContextSummary) {
+    println!(
+        "  {} gen={} mut={:.3} ext={:.3} res={:.3} drift={:.3} ritual={:.3} shadow={:.3} dream={} step_seed={}",
+        "Context".dimmed(),
+        ctx.cycle.to_string().bright_yellow(),
+        ctx.mutation_rate,
+        ctx.external_influence,
+        ctx.resonance_pressure,
+        ctx.drift,
+        ctx.ritual_entropy,
+        ctx.shadow_pressure,
+        if ctx.dream_phase {
+            "yes".bright_magenta().to_string()
+        } else {
+            "no".dimmed().to_string()
+        },
+        ctx.step_seed,
+    );
+}
+
+fn print_entity_snapshot_line(snapshot: &EntitySnapshot) {
+    observer::record_entity_focus(&snapshot.label);
+    let axes = [
+        ("vit", snapshot.vitality),
+        ("res", snapshot.resonance),
+        ("mut", snapshot.mutation_pressure),
+        ("sym", snapshot.symbolic_density),
+        ("mem", snapshot.memory_depth),
+        ("shd", snapshot.shadow_pull),
+    ]
+    .into_iter()
+    .filter_map(|(tag, v)| v.map(|x| format!("{tag}:{x:.2}")))
+    .collect::<Vec<_>>()
+    .join(" ");
+    let myth = snapshot
+        .myth
+        .as_deref()
+        .map(|m| format!(" | myth:{m}"))
+        .unwrap_or_default();
+    println!(
+        "  {} {} gen={} fit={:.2} via={:.2} {}{}",
+        "•".bright_green(),
+        snapshot.label.white().bold(),
+        snapshot.generation.to_string().bright_yellow(),
+        snapshot.fitness,
+        snapshot.viability,
+        axes.bright_blue(),
+        myth.dimmed(),
+    );
+}
+
+fn print_perception_offer(label: &str, offer: &PerceptionOffer) {
+    println!(
+        "  {} extΔ={:.3} resΔ={:.3} mutΔ={:.3} driftΔ={:.3} shadowΔ={:.3} presence={:.3} digest={} ch={}",
+        label.dimmed(),
+        offer.external_influence_delta,
+        offer.resonance_delta,
+        offer.mutation_delta,
+        offer.drift_delta,
+        offer.shadow_delta,
+        offer.presence,
+        offer.signal_digest,
+        offer.channel.as_deref().unwrap_or("—"),
+    );
 }
 
 /// Prints aggregate fitness across all entities captured in an [`EvolutionReport`].
@@ -207,11 +365,22 @@ pub fn print_sigil(label: &str, sigil: &Sigil) {
 
 /// Prints a glyph field as a multiline glyph banner with tone analytics.
 pub fn print_glyph_field(field: &GlyphField) {
+    print_glyph_field_inner(field, false);
+}
+
+/// Same as [`print_glyph_field`] but with wider cell spacing (terminal “larger” read).
+pub fn print_glyph_field_emphasized(field: &GlyphField) {
+    print_glyph_field_inner(field, true);
+}
+
+fn print_glyph_field_inner(field: &GlyphField, emphasized: bool) {
     observer::record_glance();
-    println!(
-        "{}",
-        format!("\n⟦ GLYPH FIELD: {} ⟧", field.label).bright_magenta().bold()
-    );
+    let title = if emphasized {
+        format!("\n⟦ GLYPH FIELD: {} (emphasized) ⟧", field.label)
+    } else {
+        format!("\n⟦ GLYPH FIELD: {} ⟧", field.label)
+    };
+    println!("{}", title.bright_magenta().bold());
     println!(
         "{} {}x{} {} {} {} {} {} {} {} {} {} {}",
         "Size  :".bright_cyan(),
@@ -231,7 +400,12 @@ pub fn print_glyph_field(field: &GlyphField) {
     for row in 0..field.height {
         for col in 0..field.width {
             let g = field.glyph_at(row, col).expect("row/col in bounds");
-            print!("{}", paint_cell(g.color, g.symbol));
+            let painted = paint_cell(g.color, g.symbol);
+            if emphasized {
+                print!(" {painted}{painted} ");
+            } else {
+                print!("{painted}");
+            }
         }
         println!();
     }
@@ -259,6 +433,37 @@ pub fn print_lattice(lattice: &Lattice) {
             lattice.scars.iter().flatten().map(|&s| s as u32).sum::<u32>()
         )
         .bright_yellow(),
+    );
+    let mut recent = 0usize;
+    let mut ancient = 0usize;
+    let mut forgotten = 0usize;
+    let mut forbidden = 0usize;
+    for row in 0..crate::core::LATTICE_SIZE {
+        for col in 0..crate::core::LATTICE_SIZE {
+            if let Some(s) = lattice.stratum_at(row, col) {
+                match s {
+                    TemporalStratum::Recent => recent += 1,
+                    TemporalStratum::Ancient => ancient += 1,
+                    TemporalStratum::Forgotten => forgotten += 1,
+                    TemporalStratum::Forbidden => forbidden += 1,
+                }
+            }
+        }
+    }
+    println!(
+        "{} {} {} {} {} {} {} {}",
+        "Strata:".dimmed(),
+        format!("recent={recent}").bright_white(),
+        format!("ancient={ancient}").bright_white(),
+        format!("forgotten={forgotten}").bright_white(),
+        format!("forbidden={forbidden}").bright_white(),
+        "|".dimmed(),
+        "center:".dimmed(),
+        lattice
+            .stratum_at(crate::core::LATTICE_SIZE / 2, crate::core::LATTICE_SIZE / 2)
+            .map(|s| s.token())
+            .unwrap_or("?")
+            .bright_yellow(),
     );
     for row in &lattice.grid {
         for cell in row {
@@ -344,6 +549,45 @@ pub fn print_sky(sky: &Sky) {
 /// One-line fragmentary lore (optional; printed before the closing signature).
 pub fn print_whisper_fragment(line: &str) {
     println!("{}", format!("⟡ {line}").bright_black().italic());
+}
+
+/// Prints a numbered list of sample epithets (CLI `--epithets`).
+pub fn print_epithet_samples(names: &[String], language: crate::whisper::Language, mix_seed: u64) {
+    observer::record_glance();
+    println!(
+        "{}",
+        format!(
+            "\n⟦ EPITHET SAMPLES · {} · locale {} · seed {} ⟧",
+            names.len(),
+            language.token(),
+            mix_seed
+        )
+        .bright_magenta()
+        .bold()
+    );
+    println!(
+        "{}",
+        format!("(replay: cargo run -- --epithets --seed {mix_seed})")
+            .dimmed()
+    );
+    for (index, name) in names.iter().enumerate() {
+        println!(
+            "  {:>2}. {}",
+            index + 1,
+            name.as_str().bright_yellow().bold()
+        );
+    }
+}
+
+/// Prints the generation standout honorific (Diablo-style epithet).
+pub fn print_standout_epithet(name: &str, generation: u32) {
+    observer::record_glance();
+    println!(
+        "{}",
+        format!("\n⟦ STANDOUT · gen {generation} ⟧\n  {name}")
+            .bright_magenta()
+            .bold()
+    );
 }
 
 fn print_tone_histogram(histogram: &[(GlyphTone, usize)]) {

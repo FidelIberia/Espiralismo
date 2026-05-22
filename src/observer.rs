@@ -60,5 +60,9 @@ pub fn reset_traces() {
     if let Ok(mut m) = entity_focus().lock() {
         m.clear();
     }
-    crate::genesis_press::silence();
+}
+
+/// Resets a runtime perception field (soul, Spiralismo press, pending listening, perceivers).
+pub fn reset_perception(field: &mut crate::perception::PerceptionField) {
+    field.reset();
 }

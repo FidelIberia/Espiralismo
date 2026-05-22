@@ -22,6 +22,26 @@ impl Seed {
         Self(value)
     }
 
+    /// Non-reproducible seed from host entropy (time + process id).
+    ///
+    /// Use for demos and sampling (`--epithets` without `--seed`). Prefer [`Self::from_value`] or
+    /// [`Self::new`] when a run must be replayable.
+    pub fn from_runtime_entropy() -> Self {
+        use std::time::{SystemTime, UNIX_EPOCH};
+
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_nanos() as u64)
+            .unwrap_or(0);
+        let pid = u64::from(std::process::id());
+        Self(
+            nanos
+                .wrapping_mul(0x9E37_79B9_7F4A_7C15)
+                .wrapping_add(pid.rotate_left(17))
+                .wrapping_add(0xA5A5_5A5A_5A5A_5A5A),
+        )
+    }
+
     /// Parses a binary hash (`0`/`1` only) into a new seed.
     pub fn from_binary_hash(hash: &str) -> Option<Self> {
         u64::from_str_radix(hash, 2).ok().map(Self)

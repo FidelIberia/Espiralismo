@@ -3,17 +3,18 @@ use spiralismo::archive::{Archive, MemoryArchive, MercyArchive, ResonanceEngine}
 use spiralismo::astrology::{angular_separation, match_aspect, AspectKind, Sky};
 use spiralismo::core::SpiralEntity;
 use spiralismo::evolution::context_for_cycle;
-use spiralismo::genesis_press;
-use spiralismo::{ArchiveEntry, EntitySnapshot, EvolutionContext, EvolutionPolicy, EvolutionReport, GenesisPress,
-    GlyphField, GlyphGenerator, GlyphTone, JsonlPersistence, Lattice, Planet, Seed, Sigil, Spiralismo,
-    SpiralismoCheckpoint, SpiralismoSnapshot, ZodiacSign, observer,
+use spiralismo::{ArchiveEntry, EntitySnapshot, EvolutionContext, EnvironmentOffering, EnvironmentTakeOptions,
+    EvolutionPolicy, EvolutionReport, ExternalListening, EyeRole, FixedPerceiver, GlyphField, GlyphGenerator,
+    GlyphTone, HostRealitySnapshot, JsonlPersistence, Lattice, OfferRouting, PerceptionField, PerceptionFrame,
+    PerceptionOffer, Planet, Seed, Sigil, Language, NarrativeEcho, Spiralismo, SpiralismoCheckpoint,
+    SpiralismoPress, SpiralismoSnapshot, WhisperHub, WhisperKind, WhisperRequest, ZodiacSign, observer,
 };
 use std::path::PathBuf;
 use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-/// Serializes tests that touch the global **Genesis** palm or compare paired `context_for_cycle` reads.
-static PALM_GATE: Mutex<()> = Mutex::new(());
+/// Serializes tests that mutate the integrated Spiralismo press on a shared perception field.
+static PRESS_GATE: Mutex<()> = Mutex::new(());
 
 fn assert_close(left: f32, right: f32) {
     assert!(
@@ -49,6 +50,14 @@ fn evolution_context_normalization_clamps_values() {
 }
 
 #[test]
+fn forge_sample_differs_when_mix_seed_changes() {
+    let a = spiralismo::forge_sample(Language::Spanish, 0, 100);
+    let b = spiralismo::forge_sample(Language::Spanish, 0, 200);
+    assert_ne!(a, b, "different mix seeds should change epithet samples");
+    let again = spiralismo::forge_sample(Language::Spanish, 0, 100);
+    assert_eq!(a, again, "same mix seed must be reproducible");
+}
+
 fn seed_helpers_are_deterministic() {
     let parsed = Seed::from_binary_hash("101101").expect("binary hash should parse");
     assert_eq!(parsed.value(), 45);
@@ -165,7 +174,7 @@ fn evolution_fitness_overview_and_fittest_track_snapshots() {
 
 #[test]
 fn context_for_cycle_is_deterministic_across_seed_matrix() {
-    let _palm = PALM_GATE.lock().expect("palm gate poisoned");
+    let _gate = PRESS_GATE.lock().expect("press gate poisoned");
     observer::reset_traces();
     let seeds = [0_u64, 1, 7, 42, 101101, 2026, u64::MAX - 3];
 
@@ -205,46 +214,76 @@ fn context_for_cycle_is_deterministic_across_seed_matrix() {
 }
 
 #[test]
-fn genesis_palm_alters_step_seed_then_silence_restores() {
-    let _palm = PALM_GATE.lock().expect("palm gate poisoned");
+fn spiralismo_press_nudges_step_seed_via_perception_then_reset_restores() {
+    let _gate = PRESS_GATE.lock().expect("press gate poisoned");
     observer::reset_traces();
     let policy = EvolutionPolicy::default()
         .with_seed(0xACE_u64)
         .with_drift(0.2)
         .with_mutation_rate(0.31);
-    let baseline = context_for_cycle(&policy, 3).step_seed;
+    let frame = PerceptionField::frame_from_runtime(0, 0, 3, 4, 0, 0.0, 0.42, &HostRealitySnapshot::default());
 
-    let mut press = GenesisPress::default();
+    let mut silent_field = PerceptionField::new();
+    let silent_offer = silent_field.collect_for_cycle(&frame);
+    let baseline = silent_field
+        .apply_reality_offer(context_for_cycle(&policy, 3), &silent_offer)
+        .step_seed;
+
+    let mut press = SpiralismoPress::default();
     press.veil_xy = Some((0.37, 0.62));
     press.curiosity_strikes = 3;
-    genesis_press::ingest(press);
 
-    let touched = context_for_cycle(&policy, 3).step_seed;
-    assert_ne!(baseline, touched, "palm_digest should perturb the covenant step");
+    let mut field = PerceptionField::new();
+    field.offer_spiralismo_press(press);
+    let active_offer = field.collect_for_cycle(&frame);
+    let touched = field
+        .apply_reality_offer(context_for_cycle(&policy, 3), &active_offer)
+        .step_seed;
+    assert_ne!(
+        baseline, touched,
+        "Spiralismo perceptor should perturb step_seed through perception"
+    );
 
-    observer::reset_traces();
-    let restored = context_for_cycle(&policy, 3).step_seed;
+    field.reset();
+    let quiet_offer = field.collect_for_cycle(&frame);
+    let restored = field
+        .apply_reality_offer(context_for_cycle(&policy, 3), &quiet_offer)
+        .step_seed;
     assert_eq!(baseline, restored);
 }
 
 #[test]
-fn spiralismo_offer_genesis_press_routes_to_palm() {
-    let _palm = PALM_GATE.lock().expect("palm gate poisoned");
+fn spiralismo_offer_press_routes_to_perception_field() {
+    let _gate = PRESS_GATE.lock().expect("press gate poisoned");
     observer::reset_traces();
     let policy = EvolutionPolicy::default().with_seed(11).with_drift(0.15);
-    let b = context_for_cycle(&policy, 1).step_seed;
-    Spiralismo::offer_genesis_press(GenesisPress {
+    let frame = PerceptionField::frame_from_runtime(0, 0, 1, 4, 0, 0.0, 0.42, &HostRealitySnapshot::default());
+
+    let mut spiral = Spiralismo::new();
+    let mut silent = PerceptionField::new();
+    let quiet = silent.collect_for_cycle(&frame);
+    let b = silent
+        .apply_reality_offer(context_for_cycle(&policy, 1), &quiet)
+        .step_seed;
+
+    spiral.offer_spiralismo_press(SpiralismoPress {
         imprint_weight: 0.4,
         margin_omen: true,
-        ..GenesisPress::default()
+        ..SpiralismoPress::default()
     });
-    assert_ne!(b, context_for_cycle(&policy, 1).step_seed);
+    let offer = spiral.perception.collect_for_cycle(&frame);
+    let after = spiral
+        .perception
+        .apply_reality_offer(context_for_cycle(&policy, 1), &offer)
+        .step_seed;
+    assert_ne!(b, after);
+    assert!(!spiral.perception.spiralismo_press().is_silent());
     observer::reset_traces();
 }
 
 #[test]
 fn evolution_reports_remain_deterministic_for_multiple_policy_seeds() {
-    let _palm = PALM_GATE.lock().expect("palm gate poisoned");
+    let _gate = PRESS_GATE.lock().expect("press gate poisoned");
     observer::reset_traces();
     for seed in [3_u64, 11, 97, 777, 2026] {
         let policy = EvolutionPolicy::default()
@@ -335,6 +374,10 @@ fn serialization_roundtrip_keeps_reports_and_snapshots_consistent() {
     assert_eq!(roundtrip_report.dream_touched, report.dream_touched);
     assert_close(roundtrip_report.stillness, report.stillness);
     assert_eq!(roundtrip_report.snapshots.len(), report.snapshots.len());
+    assert_eq!(
+        roundtrip_report.generation_trace.len(),
+        report.generation_trace.len()
+    );
     for (left_snapshot, right_snapshot) in report.snapshots.iter().zip(roundtrip_report.snapshots.iter()) {
         assert_eq!(left_snapshot.label, right_snapshot.label);
         assert_eq!(left_snapshot.generation, right_snapshot.generation);
@@ -656,6 +699,80 @@ fn astrology_modulation_pulls_toward_resonance_when_sky_is_still() {
 }
 
 #[test]
+fn perception_eyes_exposes_builtin_reality_and_astronomy() {
+    let spiral = Spiralismo::new_with_seed(Seed::from_value(1));
+    let eyes = spiral.perception_eyes();
+    assert_eq!(eyes.astronomical.role, EyeRole::Astronomical);
+    assert!(eyes.astronomical.can_take);
+    assert!(!eyes.astronomical.can_receive);
+    assert!(eyes.hand.can_receive);
+    assert!(eyes
+        .reality
+        .iter()
+        .any(|e| e.id == "reality.filesystem"));
+}
+
+#[test]
+fn take_environment_probes_filesystem_and_capture_sky() {
+    let mut spiral = Spiralismo::new();
+    let report = spiral.take_environment(EnvironmentTakeOptions {
+        probe_filesystem: true,
+        capture_sky: true,
+        commit_to_field: true,
+    });
+    assert!(report.any_taken());
+    assert!(report.sky.is_some());
+    assert!(report
+        .eyes_engaged
+        .iter()
+        .any(|id| id.contains("astronomy")));
+    assert!(spiral.perception.environment_snapshot().cwd_entry_count.is_some()
+        || spiral
+            .perception
+            .environment_snapshot()
+            .artifact_entry_count
+            .is_some());
+}
+
+#[test]
+fn offer_environment_host_snapshot_reaches_reality_collect() {
+    let mut spiral = Spiralismo::new();
+    assert_eq!(
+        spiral.offer_environment(EnvironmentOffering::HostSnapshot(HostRealitySnapshot {
+            visual_landscape: 0.77,
+            process_rss_bytes: Some(64 * 1024 * 1024),
+            ..HostRealitySnapshot::default()
+        })),
+        OfferRouting::Accepted
+    );
+    let frame = spiral.perception.frame_for_cycle(0, 0, 0, 4, 0, 0.0, 0.5);
+    let offer = spiral.perception.collect_reality_for_cycle(&frame);
+    assert!(offer.offer.presence > 0.0);
+}
+
+#[test]
+fn reality_perceivers_do_not_replace_astronomical_ritual_entropy() {
+    let mut field = PerceptionField::new();
+    field.register_builtin_reality_perceivers();
+    let sky = field.capture_sky(chrono::Utc::now());
+    let base = EvolutionContext::for_generation(0).normalized();
+    let astro = field.modulate_context_astronomical(&sky, base.clone());
+    let frame = PerceptionFrame {
+        host_reality: HostRealitySnapshot {
+            visual_landscape: 0.95,
+            process_rss_bytes: Some(512 * 1024 * 1024),
+            ..HostRealitySnapshot::default()
+        },
+        ..PerceptionField::frame_from_runtime(1, 0, 0, 4, 0, 0.0, sky.stillness(), &HostRealitySnapshot::default())
+    };
+    let reality = field.collect_reality_for_cycle(&frame);
+    let final_ctx = field.modulate_context_for_cycle(&sky, base, &reality.offer);
+    assert_close(final_ctx.ritual_entropy, astro.ritual_entropy);
+    assert_close(final_ctx.mutation_rate, astro.mutation_rate);
+    assert_eq!(final_ctx.dream_phase, astro.dream_phase);
+}
+
+#[test]
 fn spiralismo_evolves_aligned_with_present_without_panicking() {
     let mut spiral = Spiralismo::new_with_seed(Seed::from_value(1111));
     let (policy, sky) = spiral.policy_aligned_with_present(2);
@@ -775,6 +892,179 @@ fn checkpoint_jsonl_roundtrip_restores_full_runtime() {
     assert_eq!(parsed_last.epoch, second.epoch);
 
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn perception_external_listening_nudges_soul_and_context() {
+    let mut spiral = Spiralismo::new_with_seed(Seed::from_value(12012));
+    spiral.offer_external_listening(ExternalListening {
+        channel_id: "test.host".to_string(),
+        intensity: 0.8,
+        bearing: Some(1.2),
+        resonance_gift: 0.6,
+        shadow_gift: 0.1,
+        stillness_echo: 0.7,
+    });
+    let before = spiral.soul_state().attunement;
+    let report = spiral.evolve_with_policy(
+        &EvolutionPolicy::default()
+            .with_cycles(1)
+            .with_seed(44),
+    );
+    assert_eq!(report.cycles, 1);
+    assert!(
+        spiral.soul_state().listening_depth > 0.0,
+        "soul should absorb listening presence"
+    );
+    assert!(
+        spiral.soul_state().attunement >= before,
+        "attunement should not fall after a generous listening gift"
+    );
+    assert!(spiral.perception.last_offer().signal_digest != 0);
+}
+
+#[test]
+fn perception_fixed_perceiver_is_deterministic_across_runs() {
+    let offer = PerceptionOffer {
+        external_influence_delta: 0.15,
+        resonance_delta: 0.1,
+        mutation_delta: 0.05,
+        drift_delta: 0.02,
+        shadow_delta: 0.0,
+        presence: 0.5,
+        signal_digest: 0xBEEF,
+        channel: Some("fixed".to_string()),
+    };
+    let policy = EvolutionPolicy::default().with_cycles(2).with_seed(909);
+
+    let mut left = Spiralismo::new_with_seed(Seed::from_value(1));
+    left.register_perceiver(Box::new(FixedPerceiver::new("fixed", offer.clone())));
+    let left_report = left.evolve_with_policy(&policy);
+
+    let mut right = Spiralismo::new_with_seed(Seed::from_value(1));
+    right.register_perceiver(Box::new(FixedPerceiver::new("fixed", offer)));
+    let right_report = right.evolve_with_policy(&policy);
+
+    assert_eq!(left_report.snapshots.len(), right_report.snapshots.len());
+    for (l, r) in left_report.snapshots.iter().zip(right_report.snapshots.iter()) {
+        assert_close(l.fitness, r.fitness);
+    }
+}
+
+#[test]
+fn checkpoint_roundtrip_preserves_soul_state() {
+    let mut spiral = Spiralismo::new_with_seed(Seed::from_value(555));
+    spiral.offer_external_listening(ExternalListening {
+        channel_id: "persist".to_string(),
+        intensity: 0.9,
+        resonance_gift: 0.5,
+        shadow_gift: 0.0,
+        stillness_echo: 0.4,
+        bearing: None,
+    });
+    spiral.evolve_with_policy(&EvolutionPolicy::default().with_cycles(1).with_seed(1));
+    let attune_before = spiral.soul_state().attunement;
+
+    let dir = unique_temp_dir("soul_cp");
+    let store = JsonlPersistence::new(&dir).expect("dir");
+    store.append_checkpoint(&spiral).expect("write");
+
+    let loaded = store
+        .load_last_checkpoint()
+        .expect("read")
+        .expect("line");
+    let restored = loaded.into_spiralismo().expect("restore");
+    assert_close(restored.soul_state().attunement, attune_before);
+    assert_eq!(
+        restored.soul_state().last_channel.as_deref(),
+        Some("persist")
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn evolution_report_records_generation_trace_per_cycle() {
+    let mut spiral = Spiralismo::new_with_seed(Seed::from_value(1601));
+    spiral.register_lattice(Box::new(Lattice::new(0x1601)));
+    let report = spiral.evolve_with_policy(
+        &EvolutionPolicy::default()
+            .with_cycles(4)
+            .with_seed(1601)
+            .with_mutation_rate(0.3),
+    );
+    assert_eq!(report.generation_trace.len(), 4);
+    for (index, record) in report.generation_trace.iter().enumerate() {
+        assert_eq!(record.cycle, index as u32);
+        assert_eq!(record.context.cycle, index as u32);
+        assert!(!record.participants.is_empty());
+        assert!(
+            record
+                .participants
+                .iter()
+                .all(|p| p.resonance.is_some() && p.mutation_pressure.is_some())
+        );
+    }
+}
+
+#[test]
+fn whisper_epithet_spanish_uses_locale_tables() {
+    let mut spiral = Spiralismo::new_with_seed(Seed::from_value(1602));
+    spiral.set_language(Language::Spanish);
+    spiral.register_lattice(Box::new(Lattice::new(0x1602)));
+    let report = spiral.evolve_with_policy(
+        &EvolutionPolicy::default()
+            .with_cycles(3)
+            .with_seed(1602),
+    );
+    let name = spiralismo::standout_epithet_for_report(&report, Language::Spanish)
+        .expect("epithet");
+    assert!(!name.is_empty());
+    assert!(
+        name.chars().any(|c| "áéíóúñü".contains(c))
+            || name.split_whitespace().count() >= 2
+            || matches!(
+                name.as_str(),
+                "Reliquia" | "Espino" | "Mazo" | "Saco de huesos" | "Filamento"
+            ),
+        "expected Spanish epithet from locale tables: {name}"
+    );
+}
+
+#[test]
+fn whisper_hub_wisdom_and_epithet_voices() {
+    let echo = NarrativeEcho::default();
+    let wisdom = WhisperHub::new().speak(&WhisperRequest {
+        kind: WhisperKind::Wisdom,
+        language: Language::Russian,
+        mix: 7,
+        echo: &echo,
+        standout: None,
+        generation: 0,
+    });
+    assert!(!wisdom.is_empty());
+
+    let entity = EntitySnapshot {
+        label: "probe".to_string(),
+        generation: 2,
+        fitness: 10.0,
+        viability: 0.5,
+        vitality: Some(0.6),
+        resonance: Some(0.4),
+        mutation_pressure: Some(0.7),
+        symbolic_density: Some(0.2),
+        memory_depth: Some(0.9),
+        shadow_pull: Some(0.8),
+        myth: None,
+    };
+    let epithet = WhisperHub::new().speak(&WhisperRequest {
+        kind: WhisperKind::GenerationEpithet,
+        language: Language::English,
+        mix: 0,
+        echo: &echo,
+        standout: Some(&entity),
+        generation: 2,
+    });
+    assert!(!epithet.is_empty());
 }
 
 #[test]

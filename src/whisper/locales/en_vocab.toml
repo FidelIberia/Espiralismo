@@ -1,0 +1,501 @@
+# Extended epithet vocabulary (merged with en.toml at compile time).
+
+[[epithet.stems]]
+text = "Corpse"
+g = "m"
+n = "s"
+
+[[epithet.stems]]
+text = "Corpses"
+g = "m"
+n = "p"
+
+[[epithet.stems]]
+text = "Black Candle"
+g = "f"
+n = "s"
+
+[[epithet.stems]]
+text = "Black Candles"
+g = "f"
+n = "p"
+
+[[epithet.stems]]
+text = "Rune"
+g = "f"
+n = "s"
+
+[[epithet.stems]]
+text = "Runes"
+g = "f"
+n = "p"
+
+[[epithet.stems]]
+text = "Empty Throne"
+g = "m"
+n = "s"
+
+[[epithet.stems]]
+text = "Empty Thrones"
+g = "m"
+n = "p"
+
+[[epithet.qualifiers]]
+text = "of the Underworld"
+
+[[epithet.qualifiers]]
+text = "of Eternal Night"
+
+[[epithet.qualifiers]]
+text = "of Ancient Blood"
+
+[[epithet.qualifiers]]
+text = "of the Fallen Throne"
+
+[[epithet.qualifiers]]
+text = "of Broken Dreams"
+n = "p"
+
+[[epithet.adjectives]]
+invariant = "silvered"
+
+[[epithet.adjectives]]
+invariant = "venomed"
+
+[[epithet.adjectives]]
+invariant = "fathomless"
+
+[[epithet.adjectives]]
+invariant = "spectral"
+
+[[epithet.adjectives]]
+invariant = "feral"
+
+[[epithet.adjectives]]
+invariant = "hoary"
+
+[[epithet.adjectives]]
+invariant = "putrid"
+
+[[epithet.adjectives]]
+invariant = "ethereal"
+
+[[epithet.adjectives]]
+invariant = "squalid"
+
+[[epithet.adjectives]]
+invariant = "pitiless"
+
+[[epithet.adjectives]]
+invariant = "fractured"
+
+[[epithet.adjectives]]
+invariant = "bloody"
+
+[[epithet.adjectives]]
+invariant = "crepuscular"
+
+[[epithet.adjectives]]
+invariant = "abyssal"
+
+[[epithet.adjectives]]
+invariant = "twisted"
+
+[[epithet.adjectives]]
+invariant = "livid"
+
+[[epithet.adjectives]]
+invariant = "starred"
+
+[[epithet.adjectives]]
+invariant = "crimson"
+
+[[epithet.adjectives]]
+invariant = "agonizing"
+
+[[epithet.adjectives]]
+invariant = "titanic"
+
+[[epithet.adjectives]]
+invariant = "incorporeal"
+
+[[epithet.adjectives]]
+invariant = "curse-laden"
+
+[[epithet.adjectives]]
+invariant = "flayed"
+
+[[epithet.adjectives]]
+invariant = "sworn"
+
+[[epithet.curses]]
+invariant = "execrated"
+
+[[epithet.curses]]
+invariant = "blasphemed"
+
+[[epithet.curses]]
+invariant = "abominated"
+
+[[epithet.curses]]
+invariant = "anathematized"
+
+[[epithet.verbal_states]]
+invariant = "devoured"
+
+[[epithet.verbal_states]]
+invariant = "crushed"
+
+[[epithet.verbal_states]]
+invariant = "summoned"
+
+[[epithet.verbal_states]]
+invariant = "banished"
+
+[[epithet.verbal_states]]
+invariant = "torn"
+
+[[epithet.verbal_states]]
+invariant = "chained"
+
+[[epithet.verbal_states]]
+invariant = "buried"
+
+[[epithet.verbal_states]]
+invariant = "drowned"
+
+[[epithet.verbal_states]]
+invariant = "betrayed"
+
+[[epithet.verbal_states]]
+invariant = "consumed"
+
+[[epithet.verbal_states]]
+invariant = "revealed"
+
+[[epithet.verbal_states]]
+invariant = "hidden"
+
+[[epithet.verbal_states]]
+invariant = "flayed"
+
+[[epithet.verbal_states]]
+invariant = "sworn"
+
+[[epithet.verbal_states]]
+invariant = "burned"
+
+[[epithet.verbal_states]]
+invariant = "awakened"
+
+[[epithet.verbal_agents]]
+text = "the titan"
+linker = "by"
+
+[[epithet.verbal_agents]]
+text = "the titans"
+n = "p"
+linker = "by"
+
+[[epithet.verbal_agents]]
+text = "the dragon"
+linker = "by"
+
+[[epithet.verbal_agents]]
+text = "the Fates"
+n = "p"
+linker = "by"
+
+[[epithet.verbal_agents]]
+text = "the sea"
+linker = "by"
+
+[[epithet.verbal_agents]]
+text = "the storm"
+linker = "by"
+
+[[epithet.verbal_agents]]
+text = "the dead"
+n = "p"
+linker = "by"
+
+[[epithet.verbal_agents]]
+text = "the first name"
+linker = "by"
+
+[[epithet.verbal_agents]]
+text = "the clock"
+linker = "by"
+
+[[epithet.verbal_agents]]
+text = "the serpent"
+linker = "by"
+
+[[epithet.verbal_agents]]
+text = "the black sun"
+linker = "by"
+
+[[epithet.verbal_agents]]
+text = "the red moon"
+linker = "by"
+
+[[epithet.verbal_agents]]
+text = "the gods"
+n = "p"
+linker = "by"
+
+[[epithet.verbal_agents]]
+text = "judgment"
+linker = "by"
+
+[[epithet.titles]]
+invariant = "the Fallen"
+
+[[epithet.titles]]
+invariant = "the Sworn"
+
+[[epithet.titles]]
+invariant = "the Faceless"
+
+[epithet]
+proper_names = [
+    "Zeus",
+    "Hera",
+    "Hades",
+    "Persephone",
+    "Athena",
+    "Apollo",
+    "Artemis",
+    "Aphrodite",
+    "Ares",
+    "Hermes",
+    "Dionysus",
+    "Poseidon",
+    "Medusa",
+    "Prometheus",
+    "Chaos",
+    "Nyx",
+    "Erebus",
+    "Tartarus",
+    "Clotho",
+    "Lachesis",
+    "Atropos",
+    "Odin",
+    "Thor",
+    "Loki",
+    "Freyja",
+    "Hel",
+    "Fenrir",
+    "Jormungandr",
+    "Tyr",
+    "Balder",
+    "Heimdall",
+    "Surtr",
+    "Ymir",
+    "Ra",
+    "Osiris",
+    "Isis",
+    "Anubis",
+    "Set",
+    "Thoth",
+    "Apophis",
+    "Horus",
+    "Bastet",
+    "Sekhmet",
+    "Ptah",
+    "Sobek",
+    "Nephthys",
+    "Ereshkigal",
+    "Nergal",
+    "Shiva",
+    "Vishnu",
+    "Brahma",
+    "Kali",
+    "Garuda",
+    "Indra",
+    "Morrigan",
+    "Cernunnos",
+    "Lugh",
+    "Dagda",
+    "Cú Chulainn",
+    "Balor",
+    "Merlin",
+    "Morgan",
+    "Arthur",
+    "Lancelot",
+    "Guinevere",
+    "Mordred",
+    "Leviathan",
+    "Beelzebub",
+    "Lilith",
+    "Azazel",
+    "Metatron",
+    "Samael",
+    "Michael",
+    "Gabriel",
+    "Raphael",
+    "Uriel",
+    "Tiamat",
+    "Enlil",
+    "Enki",
+    "Ishtar",
+    "Gilgamesh",
+    "Enkidu",
+    "Marduk",
+    "Chernobog",
+    "Perun",
+    "Veles",
+    "Baba Yaga",
+    "Koschei",
+    "Amaterasu",
+    "Susanoo",
+    "Izanagi",
+    "Izanami",
+    "Tsukuyomi",
+    "Raijin",
+    "Fujin",
+    "Oni",
+    "Tengu",
+    "Kitsune",
+    "Quetzalcoatl",
+    "Tezcatlipoca",
+    "Mictlantecuhtli",
+    "Huitzilopochtli",
+    "Angra Mainyu",
+    "Ahura Mazda",
+    "Mithra",
+    "Zoroaster",
+    "Cerberus",
+    "Hydra",
+    "Chimera",
+    "Minotaur",
+    "Kraken",
+    "Baphomet",
+    "Asmodeus",
+    "Mephistopheles",
+    "Astaroth",
+    "Baal",
+    "Moloch",
+    "Hecate",
+    "Eros",
+    "Psyche",
+    "Orpheus",
+    "Eurydice",
+    "Achilles",
+    "Hector",
+    "Paris",
+    "Helen",
+    "Agamemnon",
+    "Oedipus",
+    "Antigone",
+    "Sphinx",
+    "Pegasus",
+    "Cyclops",
+    "Atlas",
+    "Cronus",
+    "Demeter",
+    "Hephaestus",
+    "Thanatos",
+    "Charon",
+    "Circe",
+    "Calypso",
+    "Odysseus",
+    "Tiresias",
+    "Cassandra",
+    "Sibyl",
+    "Gorgon",
+    "Echidna",
+    "Typhon",
+    "Python",
+    "Proteus",
+    "Triton",
+    "Amphitrite",
+    "Polyphemus",
+    "Janus",
+    "Vesta",
+    "Baron Samedi",
+    "Papa Legba",
+    "Erzulie",
+    "Shango",
+    "Yemoja",
+    "Anansi",
+    "Coyote",
+    "Raven",
+    "Thunderbird",
+    "Wendigo",
+    "Banshee",
+    "Dullahan",
+    "Kelpie",
+    "Nessie",
+    "Yeti",
+    "Pangu",
+    "Nuwa",
+    "Sun Wukong",
+    "Nezha",
+    "Guanyin",
+    "Yanluo",
+    "Hanuman",
+    "Ravana",
+    "Sita",
+    "Rama",
+    "Krishna",
+    "Arjuna",
+    "Durga",
+    "Ganesha",
+    "Njord",
+    "Freyr",
+    "Idunn",
+    "Mimir",
+    "Nidhogg",
+    "Ratatoskr",
+    "Sleipnir",
+    "Garmr",
+    "Frigg",
+    "Sigurd",
+    "Brunhild",
+    "Parsifal",
+    "Tristan",
+    "Isolde",
+    "Gawain",
+    "Percival",
+    "Galahad",
+    "Taliesin",
+    "Rhiannon",
+    "Arawn",
+    "Pan",
+    "Diana",
+    "Juno",
+    "Minerva",
+    "Venus",
+    "Mars",
+    "Pluto",
+    "Bacchus",
+    "Proserpina",
+    "Cybele",
+    "Attis",
+    "Adonis",
+    "Tammuz",
+    "Inanna",
+    "Lamashtu",
+    "Pazuzu",
+    "Lamia",
+    "Puck",
+    "Oberon",
+    "Titania",
+    "Prospero",
+    "Caliban",
+    "Faust",
+    "Dracula",
+    "Frankenstein",
+    "Genghis Khan",
+    "Attila",
+    "Charlemagne",
+    "Roland",
+    "Fafnir",
+    "Siegfried",
+    "Kriemhild",
+    "Urdr",
+    "Verdandi",
+    "Skuld",
+    "Sigrdrifa",
+]

@@ -1,0 +1,303 @@
+[wisdom]
+fragments = [
+    "The spiral tightens where nothing was promised.",
+    "What was woven once still tugs at the corners.",
+    "Edges sharpen where the witness stayed too long.",
+    "Some doors only open after the third forgetting.",
+    "The salt remembers the tide; it does not argue.",
+    "A pattern repeated is not yet a law.",
+    "The center held because the rim forgot to fall.",
+    "Echoes trade names; only distance keeps them honest.",
+    "The field cools when the sky pretends to sleep.",
+    "Memory walks backward through smoke.",
+    "Not every lattice is a cage—some are maps.",
+    "The glyph knew the hand before the hand knew intent.",
+    "Stillness is not absence; it is pressure dressed as rest.",
+    "Two resonances met and called it coincidence.",
+    "The cartographer drew a shore; the sea revised it.",
+    "Mercy left a door ajar; discipline closed nothing.",
+    "Spark without root becomes weather.",
+    "Root without spark becomes monument.",
+    "The archive yawned; the epoch advanced anyway.",
+    "A line of power ends where curiosity hesitates.",
+    "The sky offered a bias; the spiral chose a step.",
+    "Harmony is a loan; the interest is attention.",
+    "What survives selection is not always what was loved.",
+    "The last report was true enough to mislead kindly.",
+    "The fossil hums under the new paint.",
+    "A taboo is only a love letter written backwards.",
+    "The lattice dreamed a symbol it had never hosted.",
+    "Absence piled until it became a second alphabet.",
+    "The watched corner grew warmer than the sunlit hall.",
+]
+
+[[epithet.stems]]
+text = "Bone Sack"
+g = "m"
+n = "s"
+
+[[epithet.stems]]
+text = "Bone Sacks"
+g = "m"
+n = "p"
+
+[[epithet.stems]]
+text = "Thorn"
+g = "m"
+n = "s"
+
+[[epithet.stems]]
+text = "Thorns"
+g = "m"
+n = "p"
+
+[[epithet.stems]]
+text = "Orb"
+g = "n"
+n = "s"
+
+[[epithet.stems]]
+text = "Orbs"
+g = "n"
+n = "p"
+
+[[epithet.stems]]
+text = "Maul"
+g = "m"
+n = "s"
+
+[[epithet.stems]]
+text = "Mauls"
+g = "m"
+n = "p"
+
+[[epithet.stems]]
+text = "Relic"
+g = "f"
+n = "s"
+
+[[epithet.stems]]
+text = "Relics"
+g = "f"
+n = "p"
+
+[[epithet.stems]]
+text = "Filament"
+g = "m"
+n = "s"
+
+[[epithet.stems]]
+text = "Filaments"
+g = "m"
+n = "p"
+
+[[epithet.stems]]
+text = "Broken Crown"
+g = "f"
+n = "s"
+
+[[epithet.stems]]
+text = "Broken Crowns"
+g = "f"
+n = "p"
+
+[[epithet.qualifiers]]
+text = "of the Abyss"
+
+[[epithet.qualifiers]]
+text = "of Despair"
+
+[[epithet.qualifiers]]
+text = "of Ashes"
+
+[[epithet.qualifiers]]
+text = "of Madness"
+
+[[epithet.qualifiers]]
+text = "of the Void"
+
+[[epithet.qualifiers]]
+text = "of Cold Iron"
+
+[[epithet.qualifiers]]
+text = "of Forgotten Names"
+
+[[epithet.qualifiers]]
+text = "of the Archives"
+n = "p"
+
+[[epithet.adjectives]]
+invariant = "keen"
+
+[[epithet.adjectives]]
+invariant = "frozen"
+
+[[epithet.adjectives]]
+invariant = "ravenous"
+
+[[epithet.adjectives]]
+invariant = "withered"
+
+[[epithet.adjectives]]
+invariant = "incandescent"
+
+[[epithet.adjectives]]
+invariant = "silent"
+
+[[epithet.adjectives]]
+invariant = "hollow"
+
+[[epithet.adjectives]]
+invariant = "burning"
+
+[[epithet.adjectives]]
+invariant = "somber"
+
+[[epithet.adjectives]]
+invariant = "ancient"
+
+[[epithet.adjectives]]
+invariant = "wandering"
+
+[[epithet.adjectives]]
+invariant = "broken"
+
+[[epithet.curses]]
+invariant = "damned"
+
+[[epithet.curses]]
+invariant = "cursed"
+
+[[epithet.curses]]
+invariant = "hexed"
+
+[[epithet.curses]]
+invariant = "condemned"
+
+[[epithet.verbal_states]]
+invariant = "sealed"
+
+[[epithet.verbal_states]]
+invariant = "marked"
+
+[[epithet.verbal_states]]
+invariant = "profaned"
+
+[[epithet.verbal_agents]]
+text = "the shadow"
+g = "f"
+linker = "by"
+
+[[epithet.verbal_agents]]
+text = "the orcs"
+g = "m"
+n = "p"
+linker = "by"
+
+[[epithet.verbal_agents]]
+text = "the abyss"
+linker = "by"
+
+[[epithet.verbal_agents]]
+text = "something"
+indefinite = true
+linker = "by"
+
+[[epithet.verbal_agents]]
+text = "someone"
+indefinite = true
+linker = "by"
+
+[[epithet.verbal_agents]]
+text = "the darkness"
+linker = "by"
+
+[[epithet.verbal_agents]]
+text = "the dead"
+n = "p"
+linker = "by"
+
+[[epithet.verbal_agents]]
+text = "the gods"
+n = "p"
+linker = "by"
+
+[[epithet.verbal_agents]]
+text = "the serpent"
+linker = "by"
+
+[[epithet.verbal_agents]]
+text = "the red moon"
+linker = "by"
+
+[[epithet.verbal_agents]]
+text = "the black sun"
+linker = "by"
+
+[[epithet.verbal_agents]]
+text = "the storm"
+linker = "by"
+
+[[epithet.verbal_agents]]
+text = "the sea"
+linker = "by"
+
+[[epithet.verbal_agents]]
+text = "the titan"
+linker = "by"
+
+[[epithet.verbal_agents]]
+text = "the titans"
+n = "p"
+linker = "by"
+
+[[epithet.verbal_agents]]
+text = "the Fates"
+n = "p"
+linker = "by"
+
+[[epithet.verbal_agents]]
+text = "the spiral"
+linker = "by"
+
+[[epithet.verbal_agents]]
+text = "judgment"
+linker = "by"
+
+[[epithet.verbal_states]]
+invariant = "devoured"
+
+[[epithet.verbal_states]]
+invariant = "invoked"
+
+[[epithet.verbal_states]]
+invariant = "betrayed"
+
+[[epithet.verbal_states]]
+invariant = "buried"
+
+[[epithet.verbal_states]]
+invariant = "awakened"
+
+[[epithet.titles]]
+invariant = "the Mad"
+
+[[epithet.titles]]
+invariant = "the Forgotten"
+
+[[epithet.titles]]
+invariant = "the Nameless"
+
+[epithet]
+proper_names = [
+    "Azathoth",
+    "Yog-Sothoth",
+    "Nyarlathotep",
+    "Cthulhu",
+    "Hastur",
+    "Shub-Niggurath",
+    "Dagon",
+    "Nodens",
+    "Ithaqua",
+    "Tsathoggua",
+]

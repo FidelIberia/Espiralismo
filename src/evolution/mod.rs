@@ -6,7 +6,10 @@ use serde::{Deserialize, Serialize};
 
 use crate::archive::traits::Archive;
 use crate::core::traits::{EntitySnapshot, EvolutionContext, SpiralEntity};
+use chrono::Utc;
+
 use crate::observer;
+use crate::perception::PerceptionField;
 
 /// High-level policy used to build cycle-level [`EvolutionContext`] values.
 #[derive(Debug, Clone)]
@@ -94,6 +97,45 @@ impl Default for EvolutionPolicy {
     }
 }
 
+/// Scalar context at one evolution cycle (reference frame for generational output).
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct ContextSummary {
+    pub cycle: u32,
+    pub mutation_rate: f32,
+    pub external_influence: f32,
+    pub resonance_pressure: f32,
+    pub drift: f32,
+    pub ritual_entropy: f32,
+    pub shadow_pressure: f32,
+    pub dream_phase: bool,
+    pub step_seed: u64,
+}
+
+impl ContextSummary {
+    #[must_use]
+    pub fn from_context(ctx: &EvolutionContext) -> Self {
+        Self {
+            cycle: ctx.generation,
+            mutation_rate: ctx.mutation_rate,
+            external_influence: ctx.external_influence,
+            resonance_pressure: ctx.resonance_pressure,
+            drift: ctx.drift,
+            ritual_entropy: ctx.ritual_entropy,
+            shadow_pressure: ctx.shadow_pressure,
+            dream_phase: ctx.dream_phase,
+            step_seed: ctx.step_seed,
+        }
+    }
+}
+
+/// All participant snapshots after one completed cycle.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct GenerationRecord {
+    pub cycle: u32,
+    pub context: ContextSummary,
+    pub participants: Vec<EntitySnapshot>,
+}
+
 /// Aggregated output of an evolution run.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct EvolutionReport {
@@ -117,6 +159,9 @@ pub struct EvolutionReport {
     /// Stillness snapshot carried on the policy that shaped this run.
     #[serde(default)]
     pub stillness: f32,
+    /// Per-cycle reference frames (generation 0 .. cycles-1).
+    #[serde(default)]
+    pub generation_trace: Vec<GenerationRecord>,
 }
 
 impl EvolutionReport {
@@ -131,6 +176,7 @@ impl EvolutionReport {
             rare_event: None,
             dream_touched: false,
             stillness: 0.42,
+            generation_trace: Vec::new(),
         }
     }
 
@@ -214,7 +260,6 @@ pub fn context_for_cycle(policy: &EvolutionPolicy, cycle: u32) -> EvolutionConte
     let step = policy.seed.rotate_left((cycle % 64) as u32)
         ^ observer::glance_mix().wrapping_mul(0xD1E5)
         ^ observer::attention_digest().rotate_left(11)
-        ^ crate::genesis_press::palm_digest().rotate_left(19)
         ^ ((ritual.to_bits() as u64) << 17)
         ^ ((stillness.to_bits() as u64).rotate_left(7));
 
@@ -345,6 +390,9 @@ pub fn run(
     archives: &mut [Box<dyn Archive>],
     entities: &mut [Box<dyn SpiralEntity>],
     policy: &EvolutionPolicy,
+    perception: &mut PerceptionField,
+    runtime_seed: u64,
+    runtime_epoch: u64,
 ) -> EvolutionReport {
     let ritual = policy.ritual_entropy.clamp(0.0, 1.0);
     let mut report = EvolutionReport {
@@ -356,16 +404,34 @@ pub fn run(
         rare_event: None,
         dream_touched: false,
         stillness: policy.stillness.clamp(0.0, 1.0),
+        generation_trace: Vec::new(),
     };
 
     if policy.cycles == 0 {
         return report;
     }
 
+    let sky = perception
+        .cached_sky()
+        .cloned()
+        .unwrap_or_else(|| perception.capture_sky(Utc::now()));
+
     let mut last_context = EvolutionContext::default();
     let mut dream_touched = false;
+    let mut generation_trace = Vec::with_capacity(policy.cycles as usize);
     for cycle in 0..policy.cycles {
-        last_context = context_for_cycle(policy, cycle);
+        let frame = perception.frame_for_cycle(
+            runtime_seed,
+            runtime_epoch,
+            cycle,
+            archives.len(),
+            entities.len(),
+            ritual,
+            report.stillness,
+        );
+        let base = context_for_cycle(policy, cycle);
+        let reality = perception.collect_reality_for_cycle(&frame);
+        last_context = perception.modulate_context_for_cycle(&sky, base, &reality.offer);
         if last_context.dream_phase {
             dream_touched = true;
         }
@@ -375,9 +441,33 @@ pub fn run(
         for entity in &mut *entities {
             entity.evolve(&last_context);
         }
+
+        let mut participants = Vec::with_capacity(archives.len() + entities.len());
+        for archive in &*archives {
+            participants.push(build_entity_snapshot(
+                archive.name().to_string(),
+                archive.as_ref(),
+                policy,
+                &last_context,
+            ));
+        }
+        for (index, entity) in entities.iter().enumerate() {
+            participants.push(build_entity_snapshot(
+                format!("active_lattice_{index}"),
+                entity.as_ref(),
+                policy,
+                &last_context,
+            ));
+        }
+        generation_trace.push(GenerationRecord {
+            cycle,
+            context: ContextSummary::from_context(&last_context),
+            participants,
+        });
     }
 
     report.dream_touched = dream_touched;
+    report.generation_trace = generation_trace;
     for archive in &*archives {
         report.snapshots.push(build_entity_snapshot(
             archive.name().to_string(),

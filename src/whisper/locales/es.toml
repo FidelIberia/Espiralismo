@@ -1,0 +1,457 @@
+[wisdom]
+fragments = [
+    "La espiral se aprieta donde nada fue prometido.",
+    "Lo tejido una vez aún tira de las esquinas.",
+    "Los bordes se afilan donde el testigo permaneció demasiado.",
+    "Algunas puertas solo abren tras el tercer olvido.",
+    "La sal recuerda la marea; no discute.",
+    "Un patrón repetido aún no es ley.",
+    "El centro sostuvo porque el borde olvidó caer.",
+    "Los ecos cambian nombres; solo la distancia los mantiene honestos.",
+    "El campo se enfría cuando el cielo finge dormir.",
+    "La memoria camina hacia atrás entre humo.",
+    "No todo enrejado es jaula; algunos son mapas.",
+    "El glifo conocía la mano antes que la intención.",
+    "La quietud no es ausencia; es presión disfrazada de reposo.",
+    "Dos resonancias se encontraron y lo llamaron coincidencia.",
+    "El cartógrafo trazó una orilla; el mar la revisó.",
+    "La misericordia dejó una puerta entreabierta; la disciplina no cerró nada.",
+    "Chispa sin raíz se vuelve clima.",
+    "Raíz sin chispa se vuelve monumento.",
+    "El archivo bostezó; la época avanzó igual.",
+    "Una línea de poder termina donde la curiosidad vacila.",
+    "El cielo ofreció un sesgo; la espiral eligió un paso.",
+    "La armonía es un préstamo; el interés es atención.",
+    "Lo que sobrevive la selección no siempre fue amado.",
+    "El último informe fue bastante veraz para engañar con bondad.",
+    "El fósil zumba bajo la pintura nueva.",
+    "Un tabú es solo una carta de amor escrita al revés.",
+    "El enrejado soñó un símbolo que nunca había alojado.",
+    "La ausencia se apiló hasta volverse un segundo alfabeto.",
+    "La esquina observada se calentó más que el salón iluminado.",
+]
+
+[[epithet.stems]]
+text = "Saco de huesos"
+g = "m"
+n = "s"
+
+[[epithet.stems]]
+text = "Sacos de huesos"
+g = "m"
+n = "p"
+
+[[epithet.stems]]
+text = "Espino"
+g = "m"
+n = "s"
+
+[[epithet.stems]]
+text = "Espinos"
+g = "m"
+n = "p"
+
+[[epithet.stems]]
+text = "Mazo"
+g = "m"
+n = "s"
+
+[[epithet.stems]]
+text = "Mazos"
+g = "m"
+n = "p"
+
+[[epithet.stems]]
+text = "Filamento"
+g = "m"
+n = "s"
+
+[[epithet.stems]]
+text = "Filamentos"
+g = "m"
+n = "p"
+
+[[epithet.stems]]
+text = "Garra"
+g = "f"
+n = "s"
+
+[[epithet.stems]]
+text = "Garras"
+g = "f"
+n = "p"
+
+[[epithet.stems]]
+text = "Orbe"
+g = "m"
+n = "s"
+
+[[epithet.stems]]
+text = "Orbes"
+g = "m"
+n = "p"
+
+[[epithet.stems]]
+text = "Corona rota"
+g = "f"
+n = "s"
+
+[[epithet.stems]]
+text = "Coronas rotas"
+g = "f"
+n = "p"
+
+[[epithet.stems]]
+text = "Reliquia"
+g = "f"
+n = "s"
+
+[[epithet.stems]]
+text = "Reliquias"
+g = "f"
+n = "p"
+
+[[epithet.stems]]
+text = "Cáliz"
+g = "m"
+n = "s"
+
+[[epithet.stems]]
+text = "Cálices"
+g = "m"
+n = "p"
+
+[[epithet.stems]]
+text = "Aguja"
+g = "f"
+n = "s"
+
+[[epithet.stems]]
+text = "Agujas"
+g = "f"
+n = "p"
+
+[[epithet.stems]]
+text = "Lanza"
+g = "f"
+n = "s"
+
+[[epithet.stems]]
+text = "Lanzas"
+g = "f"
+n = "p"
+
+[[epithet.stems]]
+text = "Espejo roto"
+g = "m"
+n = "s"
+
+[[epithet.stems]]
+text = "Espejos rotos"
+g = "m"
+n = "p"
+
+[[epithet.stems]]
+text = "Llama pálida"
+g = "f"
+n = "s"
+
+[[epithet.stems]]
+text = "Llamas pálidas"
+g = "f"
+n = "p"
+
+[[epithet.stems]]
+text = "Bastión"
+g = "m"
+n = "s"
+
+[[epithet.stems]]
+text = "Bastiones"
+g = "m"
+n = "p"
+
+[[epithet.qualifiers]]
+text = "del abismo"
+
+[[epithet.qualifiers]]
+text = "de la desesperación"
+g = "f"
+
+[[epithet.qualifiers]]
+text = "de cenizas"
+
+[[epithet.qualifiers]]
+text = "de la locura"
+g = "f"
+
+[[epithet.qualifiers]]
+text = "del vacío"
+
+[[epithet.qualifiers]]
+text = "de hierro frío"
+
+[[epithet.qualifiers]]
+text = "de la estrella moribunda"
+g = "f"
+
+[[epithet.qualifiers]]
+text = "de nombres olvidados"
+
+[[epithet.qualifiers]]
+text = "de los archivos"
+n = "p"
+
+[[epithet.qualifiers]]
+text = "de la bruma eterna"
+g = "f"
+
+[[epithet.qualifiers]]
+text = "de la grieta"
+g = "f"
+
+[[epithet.qualifiers]]
+text = "del pozo sin fondo"
+
+[[epithet.adjectives]]
+ms = "afilado"
+fs = "afilada"
+mp = "afilados"
+fp = "afiladas"
+
+[[epithet.adjectives]]
+ms = "congelado"
+fs = "congelada"
+mp = "congelados"
+fp = "congeladas"
+
+[[epithet.adjectives]]
+ms = "voraz"
+fs = "voraz"
+mp = "voraces"
+fp = "voraces"
+
+[[epithet.adjectives]]
+ms = "marchito"
+fs = "marchita"
+mp = "marchitos"
+fp = "marchitas"
+
+[[epithet.adjectives]]
+ms = "incandescente"
+fs = "incandescente"
+mp = "incandescentes"
+fp = "incandescentes"
+
+[[epithet.adjectives]]
+ms = "silencioso"
+fs = "silenciosa"
+mp = "silenciosos"
+fp = "silenciosas"
+
+[[epithet.adjectives]]
+ms = "hueco"
+fs = "hueca"
+mp = "huecos"
+fp = "huecas"
+
+[[epithet.adjectives]]
+ms = "ardiente"
+fs = "ardiente"
+mp = "ardientes"
+fp = "ardientes"
+
+[[epithet.adjectives]]
+ms = "sombrío"
+fs = "sombría"
+mp = "sombríos"
+fp = "sombrías"
+
+[[epithet.adjectives]]
+ms = "tenaz"
+fs = "tenaz"
+mp = "tenaces"
+fp = "tenaces"
+
+[[epithet.adjectives]]
+ms = "luminoso"
+fs = "luminosa"
+mp = "luminosos"
+fp = "luminosas"
+
+[[epithet.adjectives]]
+ms = "quebrado"
+fs = "quebrada"
+mp = "quebrados"
+fp = "quebradas"
+
+[[epithet.adjectives]]
+ms = "antiguo"
+fs = "antigua"
+mp = "antiguos"
+fp = "antiguas"
+
+[[epithet.adjectives]]
+ms = "errante"
+fs = "errante"
+mp = "errantes"
+fp = "errantes"
+
+[[epithet.curses]]
+ms = "maldito"
+fs = "maldita"
+mp = "malditos"
+fp = "malditas"
+
+[[epithet.curses]]
+ms = "condenado"
+fs = "condenada"
+mp = "condenados"
+fp = "condenadas"
+
+[[epithet.curses]]
+ms = "profanado"
+fs = "profanada"
+mp = "profanados"
+fp = "profanadas"
+
+[[epithet.curses]]
+ms = "hechizado"
+fs = "hechizada"
+mp = "hechizados"
+fp = "hechizadas"
+
+[[epithet.verbal_states]]
+ms = "sellado"
+fs = "sellada"
+mp = "sellados"
+fp = "selladas"
+
+[[epithet.verbal_states]]
+ms = "marcado"
+fs = "marcada"
+mp = "marcados"
+fp = "marcadas"
+
+[[epithet.verbal_states]]
+ms = "tocado"
+fs = "tocada"
+mp = "tocados"
+fp = "tocadas"
+
+[[epithet.verbal_states]]
+ms = "arrastrado"
+fs = "arrastrada"
+mp = "arrastrados"
+fp = "arrastradas"
+
+[[epithet.verbal_states]]
+ms = "profanado"
+fs = "profanada"
+mp = "profanados"
+fp = "profanadas"
+
+[[epithet.verbal_agents]]
+text = "la sombra"
+g = "f"
+n = "s"
+linker = "por"
+
+[[epithet.verbal_agents]]
+text = "los orcos"
+g = "m"
+n = "p"
+linker = "por"
+
+[[epithet.verbal_agents]]
+text = "el abismo"
+g = "m"
+n = "s"
+linker = "por"
+
+[[epithet.verbal_agents]]
+text = "las tinieblas"
+g = "f"
+n = "p"
+linker = "por"
+
+[[epithet.verbal_agents]]
+text = "el vacío"
+g = "m"
+n = "s"
+linker = "por"
+
+[[epithet.verbal_agents]]
+text = "la locura"
+g = "f"
+n = "s"
+linker = "por"
+
+[[epithet.verbal_agents]]
+text = "algo"
+indefinite = true
+linker = "por"
+
+[[epithet.verbal_agents]]
+text = "alguien"
+indefinite = true
+linker = "por"
+
+[[epithet.verbal_agents]]
+text = "quien sabe quién"
+indefinite = true
+linker = "por"
+
+[[epithet.verbal_agents]]
+text = "la espiral"
+g = "f"
+n = "s"
+linker = "por"
+
+[[epithet.titles]]
+ms = "el loco"
+fs = "la loca"
+mp = "los locos"
+fp = "las locas"
+
+[[epithet.titles]]
+ms = "el olvidado"
+fs = "la olvidada"
+mp = "los olvidados"
+fp = "las olvidadas"
+
+[[epithet.titles]]
+ms = "el sin nombre"
+fs = "la sin nombre"
+mp = "los sin nombre"
+fp = "las sin nombre"
+
+[[epithet.titles]]
+ms = "el vigilante"
+fs = "la vigilante"
+mp = "los vigilantes"
+fp = "las vigilantes"
+
+[epithet]
+proper_names = [
+    "Azathoth",
+    "Yog-Sothoth",
+    "Nyarlathotep",
+    "Cthulhu",
+    "Hastur",
+    "Shub-Niggurath",
+    "Dagon",
+    "Nodens",
+    "Eihort",
+    "Yig",
+    "Bokrug",
+    "Glaaki",
+    "Ithaqua",
+    "Tsathoggua",
+    "Abhoth",
+    "Atlach-Nacha",
+    "Cyäegha",
+    "Daoloth",
+    "Hypnos",
+    "Lloigor",
+]

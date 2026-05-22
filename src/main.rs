@@ -3,7 +3,11 @@ use spiralismo::evolution::EvolutionPolicy;
 use spiralismo::observer;
 use spiralismo::persistence::JsonlPersistence;
 use spiralismo::render::display;
-use spiralismo::{EvolutionContext, GlyphField, GlyphGenerator, Lattice, Sky, Spiralismo};
+use spiralismo::whisper::Language;
+use spiralismo::{
+    forge_sample, standout_epithet_for_report, EvolutionContext, GlyphField, GlyphGenerator, Lattice,
+    Seed, Spiralismo,
+};
 use colored::Colorize;
 use std::env;
 use std::process;
@@ -30,6 +34,8 @@ struct DemoCli {
     print_sky: bool,
     print_status: bool,
     print_report: bool,
+    /// Per-cycle GENERATION ATLAS (opt-in; trace is always recorded in the report).
+    print_generation_atlas: bool,
     print_glyph_field: bool,
     print_lattice: bool,
     /// Print the present sky and exit (skips the full demo).
@@ -38,6 +44,14 @@ struct DemoCli {
     no_color: bool,
     /// Print one fragmentary whisper line (partial lore; opt-in).
     whisper: bool,
+    /// After evolution, burn up to N weakest entries in Mercy Field (ritual sacrifice).
+    sacrifice: Option<usize>,
+    /// Whisper locale (wisdom + generation epithet).
+    language: Language,
+    /// Print N sample epithets and exit (`--epithets`, optional `--10` / `--epithets=10`).
+    epithets_sample: Option<u32>,
+    /// Mix seed for `--epithets` (omit for runtime entropy each run).
+    epithet_seed: Option<u64>,
 }
 
 impl Default for DemoCli {
@@ -55,13 +69,28 @@ impl Default for DemoCli {
             print_sky: true,
             print_status: true,
             print_report: true,
+            print_generation_atlas: false,
             print_glyph_field: true,
             print_lattice: true,
             sky_only: false,
             no_color: false,
             whisper: false,
+            sacrifice: None,
+            language: Language::English,
+            epithets_sample: None,
+            epithet_seed: None,
         }
     }
+}
+
+/// Parses `--10` style numeric flags (epithet sample count).
+fn parse_numeric_flag(arg: &str) -> Option<u32> {
+    let tail = arg.strip_prefix("--")?;
+    if tail.is_empty() || !tail.chars().all(|c| c.is_ascii_digit()) {
+        return None;
+    }
+    let n: u32 = tail.parse().ok()?;
+    (n > 0 && n <= 200).then_some(n)
 }
 
 fn print_help() {
@@ -90,6 +119,7 @@ OPTIONS (all features enabled unless you opt out):
     --no-print-sky            Skip printing the sky table (sky may still shape policy)
     --no-print-status         Skip archive / lattice status summary
     --no-print-report         Skip evolution report
+    --generation-atlas        Print per-cycle GENERATION ATLAS (verbose; off by default)
     --no-print-glyph-field    Skip glyph field banner
     --no-print-lattice        Skip colored lattice grid
 
@@ -97,6 +127,14 @@ OPTIONS (all features enabled unless you opt out):
                               Environment: NO_COLOR (any value) also disables colors.
 
     --whisper                 After the run, print one deterministic fragmentary line (partial lore)
+    --spanish                 Whisper locale: Spanish (wisdom + epithet tables)
+    --english                 Whisper locale: English (default)
+    --russian | --rusian      Whisper locale: Russian
+    --sacrifice <N>           After evolution, burn N weakest Mercy Field entries (ritual sacrifice)
+
+    --epithets [N]            Print N sample epithets and exit (default N=10). Also: --epithets=10, --10
+    --10                      Shorthand for --epithets 10 (when used alone or after --epithets)
+    --seed <N>                Fix epithet sample mix seed (replay). Omit for fresh entropy each run
 
     -h, --help                Show this help
 
@@ -107,6 +145,11 @@ EXAMPLES:
     cargo run -- --fresh
     cargo run -- --no-sky --no-print-sky
     cargo run -- --no-glyph-field --no-print-glyph-field --no-sigil
+    cargo run -- --sacrifice 1
+    cargo run -- --generation-atlas --cycles 4
+    cargo run -- --epithets --10
+    cargo run -- --epithets --spanish --10
+    cargo run -- --epithets --seed 424242
 "
     );
 }
@@ -135,6 +178,32 @@ fn parse_cli() -> DemoCli {
         if let Some(value) = arg.strip_prefix("--snapshot-dir=") {
             if !value.is_empty() {
                 cli.artifact_dir = value.to_string();
+            }
+            i += 1;
+            continue;
+        }
+        if let Some(value) = arg.strip_prefix("--seed=") {
+            match value.parse::<u64>() {
+                Ok(n) => cli.epithet_seed = Some(n),
+                Err(_) => eprintln!("Ignoring invalid --seed={value}"),
+            }
+            i += 1;
+            continue;
+        }
+        if let Some(value) = arg.strip_prefix("--epithets=") {
+            match value.parse::<u32>() {
+                Ok(n) if n > 0 && n <= 200 => cli.epithets_sample = Some(n),
+                Ok(_) => eprintln!("Ignoring --epithets={value} (use 1..=200)"),
+                Err(_) => eprintln!("Ignoring invalid --epithets={value}"),
+            }
+            i += 1;
+            continue;
+        }
+        if let Some(value) = arg.strip_prefix("--sacrifice=") {
+            match value.parse::<usize>() {
+                Ok(n) if n > 0 => cli.sacrifice = Some(n),
+                Ok(_) => eprintln!("Ignoring --sacrifice=0 (must be at least 1)"),
+                Err(_) => eprintln!("Ignoring invalid --sacrifice={value}"),
             }
             i += 1;
             continue;
@@ -176,13 +245,60 @@ fn parse_cli() -> DemoCli {
             "--no-print-sky" => cli.print_sky = false,
             "--no-print-status" => cli.print_status = false,
             "--no-print-report" => cli.print_report = false,
+            "--generation-atlas" => cli.print_generation_atlas = true,
             "--no-print-glyph-field" => cli.print_glyph_field = false,
             "--no-print-lattice" => cli.print_lattice = false,
             "--sky" => cli.sky_only = true,
             "--whisper" => cli.whisper = true,
+            "--spanish" => cli.language = Language::Spanish,
+            "--english" => cli.language = Language::English,
+            "--russian" | "--rusian" => cli.language = Language::Russian,
+            "--seed" => {
+                if let Some(next) = args.get(i + 1) {
+                    match next.parse::<u64>() {
+                        Ok(n) => {
+                            cli.epithet_seed = Some(n);
+                            i += 1;
+                        }
+                        Err(_) => eprintln!("Ignoring invalid --seed value: {next}"),
+                    }
+                } else {
+                    eprintln!("--seed requires a numeric value");
+                }
+            }
+            "--sacrifice" => {
+                if let Some(next) = args.get(i + 1) {
+                    match next.parse::<usize>() {
+                        Ok(n) if n > 0 => {
+                            cli.sacrifice = Some(n);
+                            i += 1;
+                        }
+                        Ok(_) => eprintln!("--sacrifice requires N >= 1"),
+                        Err(_) => eprintln!("Ignoring invalid sacrifice value: {next}"),
+                    }
+                } else {
+                    eprintln!("--sacrifice requires a count");
+                }
+            }
             "--no-color" => cli.no_color = true,
+            "--epithets" => {
+                cli.epithets_sample = Some(cli.epithets_sample.unwrap_or(10));
+                if let Some(next) = args.get(i + 1) {
+                    if let Ok(n) = next.parse::<u32>() {
+                        if n > 0 && n <= 200 {
+                            cli.epithets_sample = Some(n);
+                            i += 1;
+                        }
+                    } else if let Some(n) = parse_numeric_flag(next) {
+                        cli.epithets_sample = Some(n);
+                        i += 1;
+                    }
+                }
+            }
             other => {
-                if other.starts_with('-') {
+                if let Some(n) = parse_numeric_flag(other) {
+                    cli.epithets_sample = Some(n);
+                } else if other.starts_with('-') {
                     eprintln!("Unknown option: {other} (try --help)");
                 } else {
                     eprintln!("Unexpected argument: {other} (try --help)");
@@ -205,8 +321,20 @@ fn main() {
     configure_color(&cli);
 
     if cli.sky_only {
-        let sky = Sky::now();
+        let mut spiral = Spiralismo::new();
+        let sky = spiral.sky_now();
         display::print_sky(&sky);
+        return;
+    }
+
+    if let Some(count) = cli.epithets_sample {
+        let base_seed = cli
+            .epithet_seed
+            .unwrap_or_else(|| Seed::from_runtime_entropy().value());
+        let names: Vec<String> = (0..count)
+            .map(|i| forge_sample(cli.language, i, base_seed))
+            .collect();
+        display::print_epithet_samples(&names, cli.language, base_seed);
         return;
     }
 
@@ -254,6 +382,8 @@ fn main() {
         }
     };
 
+    spiral.set_language(cli.language);
+
     if !resumed_from_disk {
         if cli.register_lattice {
             spiral.register_lattice(Box::new(Lattice::new(spiral.seed.value().rotate_left(5))));
@@ -292,36 +422,75 @@ fn main() {
         }
     }
 
-    let report = if cli.sky {
+    let (report, sky_after_run) = if cli.sky {
         let (policy, sky) = spiral.policy_aligned_with_present(cli.cycles);
         if cli.print_sky {
             display::print_sky(&sky);
         }
-        spiral.evolve_with_policy(&policy)
+        let report = spiral.evolve_with_policy(&policy);
+        (report, Some(sky))
     } else {
         let policy = EvolutionPolicy::default()
             .with_cycles(cli.cycles)
             .with_mutation_rate(0.33)
             .with_resonance_pressure(0.72);
-        spiral.evolve_with_policy(&policy)
+        let report = spiral.evolve_with_policy(&policy);
+        (report, spiral.cached_sky().cloned())
     };
 
     if cli.print_status {
         display::print_status(&spiral);
     }
+    if cli.print_generation_atlas {
+        display::print_generation_atlas(&report);
+    }
     if cli.print_report {
         display::print_report(&report);
+        if let Some(name) = standout_epithet_for_report(&report, cli.language) {
+            let gen = report.cycles.saturating_sub(1);
+            display::print_standout_epithet(&name, gen);
+        }
+        display::print_runtime_perception(&spiral);
         display::print_fitness_overview(&report);
-    }
-
-    if cli.print_glyph_field {
-        if let Some(field) = spiral.active_as::<GlyphField>() {
-            display::print_glyph_field(field);
+        if cli.print_sky && !cli.sky {
+            if let Some(ref sky) = sky_after_run {
+                display::print_sky(sky);
+            }
+        }
+        if cli.print_lattice {
+            if let Some(lat) = spiral.active_as::<Lattice>() {
+                display::print_lattice(lat);
+            }
+        }
+        if cli.print_glyph_field {
+            if let Some(field) = spiral.active_as::<GlyphField>() {
+                display::print_glyph_field_emphasized(field);
+            }
+        }
+    } else {
+        if cli.print_glyph_field {
+            if let Some(field) = spiral.active_as::<GlyphField>() {
+                display::print_glyph_field(field);
+            }
+        }
+        if cli.print_lattice {
+            if let Some(lat) = spiral.active_as::<Lattice>() {
+                display::print_lattice(lat);
+            }
         }
     }
-    if cli.print_lattice {
-        if let Some(lat) = spiral.active_as::<Lattice>() {
-            display::print_lattice(lat);
+
+    if let Some(n) = cli.sacrifice {
+        let removed = spiral.sacrifice_burn_weakest("Mercy Field", n);
+        if removed > 0 {
+            println!(
+                "{}",
+                format!("⟦ Sacrifice: {removed} weakest entr(y/ies) released from Mercy Field ⟧")
+                    .bright_red()
+                    .italic()
+            );
+        } else {
+            eprintln!("Sacrifice: nothing removed (Mercy Field empty or archive missing?)");
         }
     }
 
@@ -344,7 +513,7 @@ fn main() {
     }
 
     if cli.whisper {
-        display::print_whisper_fragment(spiral.whisper_now());
+        display::print_whisper_fragment(&spiral.whisper_now());
     }
 
     println!("{}", "\nThe spiral remembers.".bright_black().italic());

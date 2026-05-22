@@ -10,8 +10,11 @@ use crate::core::{Lattice, Seed};
 use crate::evolution::{
     build_entity_snapshot, run as run_evolution, EvolutionPolicy, EvolutionReport, FitnessOverview,
 };
-use crate::genesis_press;
 use crate::glyphs::{GlyphField, GlyphGenerator, Sigil};
+use crate::perception::{
+    ExternalListening, ExternalPerceiver, PerceptionField, PerceptionOffer, SoulState,
+    SpiralismoPress,
+};
 use crate::whisper;
 
 /// Top-level façade for the Spiralismo framework.
@@ -34,6 +37,10 @@ pub struct Spiralismo {
     pub epoch: u64,
     /// Last report emitted by [`Spiralismo::evolve_with_policy`].
     pub last_report: Option<EvolutionReport>,
+    /// External listening field — perceivers + soul (`alma`).
+    pub perception: PerceptionField,
+    /// Locale for wisdom whispers and generation epithets.
+    pub language: whisper::Language,
 }
 
 /// Read-only view of a Spiralismo runtime.
@@ -65,6 +72,8 @@ impl Spiralismo {
             active_lattices: vec![],
             epoch: 0,
             last_report: None,
+            perception: PerceptionField::new(),
+            language: whisper::Language::default(),
         };
 
         // Register all independent archives
@@ -72,6 +81,9 @@ impl Spiralismo {
         instance.register_archive(Box::new(crate::archive::MemoryArchive::new()));
         instance.register_archive(Box::new(crate::archive::CartographyArchive::new()));
         instance.register_archive(Box::new(crate::archive::ResonanceEngine::new()));
+        instance
+            .perception
+            .register_builtin_reality_perceivers();
 
         instance
     }
@@ -83,6 +95,28 @@ impl Spiralismo {
         last_report: Option<EvolutionReport>,
         archives: Vec<Box<dyn Archive>>,
         active_lattices: Vec<Box<dyn SpiralEntity>>,
+        perception: PerceptionField,
+    ) -> Self {
+        Self::from_runtime_parts_with_language(
+            seed,
+            epoch,
+            last_report,
+            archives,
+            active_lattices,
+            perception,
+            whisper::Language::default(),
+        )
+    }
+
+    /// Reconstructs a runtime with an explicit whisper locale.
+    pub fn from_runtime_parts_with_language(
+        seed: Seed,
+        epoch: u64,
+        last_report: Option<EvolutionReport>,
+        archives: Vec<Box<dyn Archive>>,
+        active_lattices: Vec<Box<dyn SpiralEntity>>,
+        perception: PerceptionField,
+        language: whisper::Language,
     ) -> Self {
         Self {
             seed,
@@ -90,7 +124,14 @@ impl Spiralismo {
             active_lattices,
             epoch,
             last_report,
+            perception,
+            language,
         }
+    }
+
+    /// Sets the active whisper locale (`en` / `es` / `ru`).
+    pub fn set_language(&mut self, language: whisper::Language) {
+        self.language = language;
     }
 
     /// Adds an archive to the runtime and logs registration.
@@ -119,10 +160,79 @@ impl Spiralismo {
         GlyphGenerator::new(self.seed.value())
     }
 
-    /// Opens the **Genesis** lane: the outer thread replaces whatever rested on the palm.
-    /// Until this is called, [`crate::genesis_press::palm_digest`] yields silence (`0`).
-    pub fn offer_genesis_press(press: genesis_press::GenesisPress) {
-        genesis_press::ingest(press);
+    /// Replaces the integrated **Spiralismo perceptor** (mouse / veil / hand on Genesis field).
+    ///
+    /// Hosts map SDL or Qt events into [`SpiralismoPress`]; influence applies on the next
+    /// [`Spiralismo::evolve_with_policy`] or [`Spiralismo::evolve_with_context`] via
+    /// [`PerceptionField::collect_for_cycle`], not a separate global digest.
+    pub fn offer_spiralismo_press(&mut self, press: SpiralismoPress) {
+        self.perception.offer_spiralismo_press(press);
+    }
+
+    /// Enqueues external listening (UI, IPC, host) into the perception field before evolution.
+    pub fn offer_external_listening(&mut self, listening: ExternalListening) {
+        self.perception.offer_listening(listening);
+    }
+
+    /// Registers a persistent external perceiver on this runtime.
+    pub fn register_perceiver(&mut self, perceiver: Box<dyn ExternalPerceiver>) {
+        self.perception.register_perceiver(perceiver);
+    }
+
+    /// Read-only view of the runtime soul (`alma`).
+    #[must_use]
+    pub fn soul_state(&self) -> &SoulState {
+        self.perception.soul()
+    }
+
+    /// Exposes perception **eyes** — ids, roles, and whether each can receive or take.
+    #[must_use]
+    pub fn perception_eyes(&self) -> crate::perception::PerceptionEyes {
+        self.perception.eyes()
+    }
+
+    /// Last host environment snapshot (receive / take path).
+    #[must_use]
+    pub fn environment_snapshot(&self) -> &crate::perception::HostRealitySnapshot {
+        self.perception.environment_snapshot()
+    }
+
+    /// Merged external influence from the last evolution cycle.
+    #[must_use]
+    pub fn last_perception_offer(&self) -> &crate::perception::PerceptionOffer {
+        self.perception.last_offer()
+    }
+
+    /// Sky cached by the astronomical lane after the last capture.
+    #[must_use]
+    pub fn cached_sky(&self) -> Option<&crate::astrology::Sky> {
+        self.perception.cached_sky()
+    }
+
+    /// Host offers environment to open eyes (receive when the world is presented).
+    pub fn offer_environment(
+        &mut self,
+        offering: crate::perception::EnvironmentOffering,
+    ) -> crate::perception::OfferRouting {
+        self.perception.offer_environment(offering)
+    }
+
+    /// Offers to a specific eye by id (see [`Spiralismo::perception_eyes`]).
+    pub fn offer_to_eye(
+        &mut self,
+        eye_id: &str,
+        offering: crate::perception::EnvironmentOffering,
+    ) -> crate::perception::OfferRouting {
+        self.perception.offer_to_eye(eye_id, offering)
+    }
+
+    /// Spiral **takes** what it can from the environment (probe disk, capture sky, …).
+    #[must_use]
+    pub fn take_environment(
+        &mut self,
+        opts: crate::perception::EnvironmentTakeOptions,
+    ) -> crate::perception::EnvironmentTakeReport {
+        self.perception.take_from_environment(opts)
     }
 
     /// Convenience helper that produces a [`Sigil`] of the requested length using the runtime seed
@@ -254,12 +364,14 @@ impl Spiralismo {
             echo.fossil_absence_mass = gf.ghost_breath_mass();
         }
         echo.attention_xor = crate::observer::attention_digest();
+        echo.soul_attunement_quant =
+            (self.perception.soul().attunement * 255.0).clamp(0.0, 255.0) as u8;
         echo
     }
 
     /// One-line fragmentary whisper for the present `(seed, epoch)` mix (see [`crate::whisper`]).
     #[must_use]
-    pub fn whisper_now(&self) -> &'static str {
+    pub fn whisper_now(&self) -> String {
         let ritual = self
             .last_report
             .as_ref()
@@ -272,7 +384,14 @@ impl Spiralismo {
             .wrapping_mul(0x9E37_79B9_7F4A_7C15)
             ^ self.epoch.wrapping_mul(0xC2B2_AE3D_27D4_EB4F)
             ^ ritual_u;
-        whisper::pick_narrative_whisper(mix, &self.narrative_echo())
+        whisper::pick_narrative_whisper_localized(self.language, mix, &self.narrative_echo())
+    }
+
+    /// Diablo-style honorific for the fittest participant of the last report.
+    #[must_use]
+    pub fn standout_epithet(&self) -> Option<String> {
+        let report = self.last_report.as_ref()?;
+        whisper::standout_epithet_for_report(report, self.language)
     }
 
     /// Irreversible sacrifice: remove up to `max` lowest-resonance entries from a named archive.
@@ -312,6 +431,27 @@ impl Spiralismo {
 
     /// Evolves all archives and active entities using a concrete context.
     pub fn evolve_with_context(&mut self, context: EvolutionContext) {
+        let ritual = context.ritual_entropy;
+        let stillness = self.last_report.as_ref().map(|r| r.stillness).unwrap_or(0.42);
+        let frame = self.perception.frame_for_cycle(
+            self.seed.value(),
+            self.epoch,
+            context.generation,
+            self.archives.len(),
+            self.active_lattices.len(),
+            ritual,
+            stillness,
+        );
+        let sky = self
+            .perception
+            .cached_sky()
+            .cloned()
+            .unwrap_or_else(|| self.perception.capture_sky(chrono::Utc::now()));
+        let reality = self.perception.collect_reality_for_cycle(&frame);
+        let context = self
+            .perception
+            .modulate_context_for_cycle(&sky, context, &reality.offer);
+
         for archive in &mut self.archives {
             archive.evolve(&context);
         }
@@ -323,7 +463,14 @@ impl Spiralismo {
 
     /// Evolves all archives and active entities using a high-level policy.
     pub fn evolve_with_policy(&mut self, policy: &EvolutionPolicy) -> EvolutionReport {
-        let report = run_evolution(&mut self.archives, &mut self.active_lattices, policy);
+        let report = run_evolution(
+            &mut self.archives,
+            &mut self.active_lattices,
+            policy,
+            &mut self.perception,
+            self.seed.value(),
+            self.epoch,
+        );
         self.epoch = self.epoch.saturating_add(policy.cycles as u64);
         self.last_report = Some(report.clone());
         report
@@ -348,45 +495,48 @@ impl Spiralismo {
         self.last_report.as_ref()
     }
 
-    /// Captures the present sky (`Utc::now`). The astrology module never mutates runtime state —
-    /// this is a contemplative read.
-    pub fn sky_now(&self) -> Sky {
-        Sky::now()
+    /// Captures the present sky via the **astronomical perceiver** (read-only).
+    pub fn sky_now(&mut self) -> Sky {
+        self.perception.capture_sky(chrono::Utc::now())
     }
 
-    /// Builds a context for the current generation, nudged by the present sky.
-    ///
-    /// Implements the "quiet room" philosophy: when the sky is still, the context leans toward
-    /// resonance and external listening; when the sky is loud (many tight aspects), it allows
-    /// more mutation and drift.
-    pub fn context_aligned_with_present(&self) -> (EvolutionContext, Sky) {
-        let sky = self.sky_now();
+    /// Builds a context for the current generation, nudged by the present sky (astronomical lane).
+    pub fn context_aligned_with_present(&mut self) -> (EvolutionContext, Sky) {
+        let sky = self.perception.capture_sky(chrono::Utc::now());
         let base = EvolutionContext::for_generation(self.epoch as u32)
             .with_step_seed(self.seed.value())
             .normalized();
-        (sky.modulate(base), sky)
+        let silent = PerceptionOffer::silent();
+        (
+            self.perception
+                .modulate_context_for_cycle(&sky, base, &silent),
+            sky,
+        )
     }
 
-    /// Builds an [`EvolutionPolicy`] gently aligned with the present sky. The runtime seed is
-    /// blended with the Julian Day so successive alignments evolve with the calendar.
-    pub fn policy_aligned_with_present(&self, cycles: u32) -> (EvolutionPolicy, Sky) {
-        let sky = self.sky_now();
-        let stillness = sky.stillness().clamp(0.0, 1.0);
-        let resonance = sky.resonance_field().clamp(0.0, 1.0);
-        let tension = sky.tension_field().clamp(0.0, 1.0);
-
-        let policy = EvolutionPolicy {
-            cycles,
-            mutation_rate: (0.20 + tension * 0.30 - stillness * 0.10).clamp(0.0, 1.0),
-            external_influence: (0.55 + stillness * 0.30).clamp(0.0, 1.0),
-            resonance_pressure: (0.50 + resonance * 0.25 + stillness * 0.20).clamp(0.0, 1.0),
-            drift: (0.08 + tension * 0.15 - stillness * 0.05).clamp(0.0, 1.0),
-            seed: self.seed.value() ^ (sky.julian_day as i64 as u64),
-            ritual_entropy: sky.ritual_entropy(),
-            stillness,
-        };
-
+    /// Builds policy from the astronomical perceiver only — reality perceptors do not participate.
+    pub fn policy_aligned_with_present(&mut self, cycles: u32) -> (EvolutionPolicy, Sky) {
+        let sky = self.perception.capture_sky(chrono::Utc::now());
+        let policy = self
+            .perception
+            .policy_from_sky(&sky, cycles, self.seed.value());
         (policy, sky)
+    }
+
+    /// Replaces the astronomical backend (e.g. alternate ephemeris module).
+    pub fn set_astronomical_perceiver(
+        &mut self,
+        perceiver: Box<dyn crate::perception::AstronomicalPerceiver>,
+    ) {
+        self.perception.set_astronomical_perceiver(perceiver);
+    }
+
+    /// Registers a reality perceptor (filesystem, memory, landscape, …).
+    pub fn register_reality_perceiver(
+        &mut self,
+        perceiver: Box<dyn crate::perception::RealityPerceiver>,
+    ) {
+        self.perception.register_reality_perceiver(perceiver);
     }
 
     /// One contemplative evolution step using the present sky as gentle modulator.

@@ -9,9 +9,9 @@ pub mod archive;
 pub mod astrology;
 pub mod core;
 pub mod evolution;
-pub mod genesis_press;
 pub mod glyphs;
 pub mod observer;
+pub mod perception;
 pub mod persistence;
 pub mod render;
 pub mod spiralismo;
@@ -26,9 +26,20 @@ pub use core::{CellColor, EntitySnapshot, EvolutionContext, LATTICE_SIZE, Lattic
 pub use core::Lattice;
 pub use core::Seed;
 pub use core::TemporalStratum;
-pub use evolution::{EvolutionPolicy, EvolutionReport, FitnessOverview};
-pub use genesis_press::GenesisPress;
+pub use evolution::{ContextSummary, EvolutionPolicy, EvolutionReport, FitnessOverview, GenerationRecord};
+pub use perception::{
+    AstronomicalPerceiver, EnvironmentOffering, EnvironmentTakeOptions, EnvironmentTakeReport,
+    ExternalListening, ExternalPerceiver, EyeRole, FilesystemPerceiver, FixedPerceiver,
+    HostRealitySnapshot, MeeusKeplerianPerceiver, OfferRouting, PerceptionEyeDescriptor,
+    PerceptionEyes, PerceptionField, PerceptionFrame, PerceptionOffer, PhysicalMemoryPerceiver,
+    RealityKind, RealityPerceiver, SoulState, SpiralismoPerceiver, SpiralismoPress,
+    StillnessEchoPerceiver, VisualLandscapePerceiver, VoidPerceiver, SPIRALISMO_PERCEIVER_ID,
+};
 pub use glyphs::{Glyph, GlyphAlphabet, GlyphField, GlyphGenerator, GlyphTone, Sigil, ToneWeights};
 pub use persistence::{CheckpointError, JsonlPersistence, SpiralismoCheckpoint};
 pub use spiralismo::{Spiralismo, SpiralismoSnapshot};
-pub use whisper::{fnv1a64, pick_narrative_whisper, pick_whisper, NarrativeEcho};
+pub use whisper::{
+    fnv1a64, forge_sample, pick_narrative_whisper, pick_narrative_whisper_localized, pick_whisper,
+    sample_entity, standout_epithet_for_report, Language, NarrativeEcho, WhisperHub, WhisperKind,
+    WhisperRequest, WhisperVoice, WisdomVoice, GenerationEpithetVoice,
+};

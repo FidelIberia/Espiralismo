@@ -14,6 +14,7 @@ use crate::core::traits::SpiralEntity;
 use crate::core::{Lattice, Seed};
 use crate::evolution::EvolutionReport;
 use crate::glyphs::GlyphField;
+use crate::perception::{PerceptionField, SoulState};
 use crate::spiralismo::Spiralismo;
 
 /// Schema version stored in [`SpiralismoCheckpoint::schema_version`].
@@ -84,6 +85,9 @@ pub struct SpiralismoCheckpoint {
     /// Optional fragment captured at save time (partial lore; absent on older checkpoints).
     #[serde(default)]
     pub whisper: Option<String>,
+    /// Soul (`alma`) at save time — absent on older checkpoints defaults to empty soul.
+    #[serde(default)]
+    pub soul: SoulState,
 }
 
 /// Serializable wrapper for a built-in archive.
@@ -115,7 +119,8 @@ impl SpiralismoCheckpoint {
             last_report: spiral.last_report.clone(),
             archives: capture_archives(spiral)?,
             active_entities: capture_active_entities(spiral)?,
-            whisper: Some(spiral.whisper_now().to_string()),
+            whisper: Some(spiral.whisper_now()),
+            soul: spiral.perception.soul().clone(),
         })
     }
 
@@ -144,12 +149,16 @@ impl SpiralismoCheckpoint {
             }
         }
 
+        let mut perception = PerceptionField::new();
+        *perception.soul_mut() = self.soul;
+
         Ok(Spiralismo::from_runtime_parts(
             Seed::from_value(self.seed_value),
             self.epoch,
             self.last_report,
             archives,
             active_lattices,
+            perception,
         ))
     }
 }

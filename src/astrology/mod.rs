@@ -1,9 +1,9 @@
 //! Astrology subsystem — planetary positions, zodiac mapping, aspects, and "quiet room" modulation.
 //!
 //! Design philosophy: this module is the silence inside the framework. It is **read-only by
-//! nature** — it does not push, it offers. Callers pull a [`Sky`] for a given instant and may
-//! choose to modulate an [`crate::core::traits::EvolutionContext`] with it, but the astrology
-//! module never mutates Spiralismo state on its own.
+//! nature** — it computes [`Sky`] snapshots only. Influence on evolution flows through
+//! [`crate::perception::AstronomicalPerceiver`] (default [`crate::perception::MeeusKeplerianPerceiver`]),
+//! never through reality perceptors (files, RAM, landscapes, …).
 //!
 //! Math sources:
 //! - JPL "Keplerian Elements for Approximate Positions of the Major Planets" (J2000).
