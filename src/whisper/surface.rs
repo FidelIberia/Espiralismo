@@ -3,8 +3,13 @@
 use super::common::Language;
 use super::grammar::{AgreementKey, Gender, Number};
 
+/// Whether a phrase includes an external agent (`por la sombra`, `by the gods`, instrumental RU).
+#[must_use]
+pub fn phrase_has_verbal_agent(language: Language, phrase: &str) -> bool {
+    segment_is_verbal(language, phrase)
+}
+
 /// Whether a comma-separated segment looks like a verbal prologue (`… por …`, `… by …`).
-#[cfg(test)]
 #[must_use]
 pub fn segment_is_verbal(language: Language, segment: &str) -> bool {
     match language {
@@ -15,7 +20,6 @@ pub fn segment_is_verbal(language: Language, segment: &str) -> bool {
 }
 
 /// Russian: participle + instrumental agent (`запечатанная тенью`, `призванный кем-то`).
-#[cfg(test)]
 fn russian_segment_is_verbal(segment: &str) -> bool {
     if segment.contains(" кем-то") || segment.contains(" чем-то") {
         return true;
@@ -27,7 +31,6 @@ fn russian_segment_is_verbal(segment: &str) -> bool {
     russian_looks_like_participle(words[0]) && russian_instrumental_agent(words.last().unwrap_or(&""))
 }
 
-#[cfg(test)]
 fn russian_looks_like_participle(word: &str) -> bool {
     word.ends_with("нный")
         || word.ends_with("нная")
@@ -49,7 +52,6 @@ fn russian_looks_like_participle(word: &str) -> bool {
         || word.ends_with("меченые")
 }
 
-#[cfg(test)]
 fn russian_instrumental_agent(word: &str) -> bool {
     word.ends_with("ой")
         || word.ends_with("ом")
@@ -73,6 +75,12 @@ fn russian_instrumental_agent(word: &str) -> bool {
         || word.ends_with("бурей")
         || word.ends_with("змеёй")
         || word.ends_with("мёртвыми")
+}
+
+/// English stacks adjectives before the noun; Spanish and Russian use post-nominal order.
+#[must_use]
+pub fn adjectives_precede_noun(language: Language) -> bool {
+    matches!(language, Language::English)
 }
 
 /// Default caps on the name phrase after a verbal prologue.

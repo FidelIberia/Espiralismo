@@ -9,6 +9,7 @@ mod common;
 mod epithet;
 mod grammar;
 mod locale;
+mod semantic;
 mod traits;
 mod surface;
 mod verbal;
@@ -207,6 +208,7 @@ mod tests {
             n: Some("s".to_string()),
             linker: "por".to_string(),
             indefinite: false,
+            ..AgentEntry::default()
         };
         assert_eq!(
             compose_verbal(Language::Spanish, participle, Some(&agent)),

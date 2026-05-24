@@ -1025,6 +1025,9 @@ fn whisper_epithet_spanish_uses_locale_tables() {
             || matches!(
                 name.as_str(),
                 "Reliquia" | "Espino" | "Mazo" | "Saco de huesos" | "Filamento"
+                    | "Icono" | "Iconos" | "Cadáver" | "Runa" | "Runas" | "Máscara"
+                    | "Garra" | "Garras"
+                    | "Trono vacío" | "Campana rota" | "Vela negra"
             ),
         "expected Spanish epithet from locale tables: {name}"
     );

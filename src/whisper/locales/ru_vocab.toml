@@ -4,31 +4,351 @@
 text = "Труп"
 g = "m"
 n = "s"
+family = "corpse"
+tags = ["corpse"]
+
+[[epithet.stems]]
+text = "Дух"
+g = "m"
+n = "s"
+family = "spirit"
+tags = ["creature", "person"]
+
+[[epithet.stems]]
+text = "Духи"
+g = "m"
+n = "p"
+family = "spirit"
+tags = ["creature", "person"]
 
 [[epithet.stems]]
 text = "Трупы"
 g = "m"
 n = "p"
+family = "corpse"
+tags = ["corpse"]
 
 [[epithet.stems]]
 text = "Чёрная свеча"
 g = "f"
 n = "s"
+family = "black_candle"
+traits = ["flame"]
 
 [[epithet.stems]]
 text = "Чёрные свечи"
 g = "f"
 n = "p"
+family = "black_candle"
+traits = ["flame"]
 
 [[epithet.stems]]
 text = "Руна"
 g = "f"
 n = "s"
+family = "rune"
 
 [[epithet.stems]]
 text = "Руны"
 g = "f"
 n = "p"
+family = "rune"
+
+[[epithet.stems]]
+text = "Серп"
+g = "m"
+n = "s"
+family = "sickle"
+tags = ["object", "weapon", "edge"]
+
+[[epithet.stems]]
+text = "Серпы"
+g = "m"
+n = "p"
+family = "sickle"
+tags = ["object", "weapon", "edge"]
+
+[[epithet.stems]]
+text = "Железная цепь"
+g = "f"
+n = "s"
+family = "iron_chain"
+tags = ["object", "relic"]
+
+[[epithet.stems]]
+text = "Железные цепи"
+g = "f"
+n = "p"
+family = "iron_chain"
+tags = ["object", "relic"]
+
+[[epithet.stems]]
+text = "Кандал"
+g = "m"
+n = "s"
+family = "shackles"
+tags = ["object", "relic"]
+
+[[epithet.stems]]
+text = "Кандалы"
+g = "m"
+n = "p"
+family = "shackles"
+tags = ["object", "relic"]
+
+[[epithet.stems]]
+text = "Надгробие"
+g = "n"
+n = "s"
+family = "tombstone"
+tags = ["object"]
+
+[[epithet.stems]]
+text = "Надгробия"
+g = "n"
+n = "p"
+family = "tombstone"
+tags = ["object"]
+
+[[epithet.stems]]
+text = "Обсидиановая печать"
+g = "f"
+n = "s"
+family = "obsidian_seal"
+tags = ["object", "relic"]
+unique = true
+
+[[epithet.stems]]
+text = "Обсидиановые печати"
+g = "f"
+n = "p"
+family = "obsidian_seal"
+tags = ["object", "relic"]
+unique = true
+
+[[epithet.stems]]
+text = "Осколок пустоты"
+g = "m"
+n = "s"
+family = "void_shard"
+tags = ["object"]
+groups = ["emptiness"]
+
+[[epithet.stems]]
+text = "Осколки пустоты"
+g = "m"
+n = "p"
+family = "void_shard"
+tags = ["object"]
+groups = ["emptiness"]
+
+[[epithet.stems]]
+text = "Погребальная урна"
+g = "f"
+n = "s"
+family = "funeral_urn"
+tags = ["object", "vessel", "relic"]
+
+[[epithet.stems]]
+text = "Погребальные урны"
+g = "f"
+n = "p"
+family = "funeral_urn"
+tags = ["object", "vessel", "relic"]
+
+[[epithet.stems]]
+text = "Кадило"
+g = "n"
+n = "s"
+family = "censer"
+tags = ["object", "vessel", "flame"]
+
+[[epithet.stems]]
+text = "Кадила"
+g = "n"
+n = "p"
+family = "censer"
+tags = ["object", "vessel", "flame"]
+
+[[epithet.stems]]
+text = "Астролябия"
+g = "f"
+n = "s"
+family = "astrolabe"
+tags = ["object", "relic"]
+unique = true
+
+[[epithet.stems]]
+text = "Астролябии"
+g = "f"
+n = "p"
+family = "astrolabe"
+tags = ["object", "relic"]
+unique = true
+
+[[epithet.stems]]
+text = "Монолит"
+g = "m"
+n = "s"
+family = "monolith"
+tags = ["object"]
+unique = true
+
+[[epithet.stems]]
+text = "Монолиты"
+g = "m"
+n = "p"
+family = "monolith"
+tags = ["object"]
+unique = true
+
+[[epithet.stems]]
+text = "Метеорит"
+g = "m"
+n = "s"
+family = "meteorite"
+tags = ["object"]
+
+[[epithet.stems]]
+text = "Метеориты"
+g = "m"
+n = "p"
+family = "meteorite"
+tags = ["object"]
+
+[[epithet.stems]]
+text = "Гаргулья"
+g = "f"
+n = "s"
+family = "gargoyle"
+tags = ["object"]
+
+[[epithet.stems]]
+text = "Гаргульи"
+g = "f"
+n = "p"
+family = "gargoyle"
+tags = ["object"]
+
+[[epithet.stems]]
+text = "Разбитый витраж"
+g = "m"
+n = "s"
+family = "broken_stained_glass"
+tags = ["object"]
+groups = ["damage"]
+
+[[epithet.stems]]
+text = "Разбитые витражи"
+g = "m"
+n = "p"
+family = "broken_stained_glass"
+tags = ["object"]
+groups = ["damage"]
+
+[[epithet.stems]]
+text = "Змеиный клык"
+g = "m"
+n = "s"
+family = "serpent_fang"
+tags = ["object", "weapon", "edge"]
+
+[[epithet.stems]]
+text = "Змеиные клыки"
+g = "m"
+n = "p"
+family = "serpent_fang"
+tags = ["object", "weapon", "edge"]
+
+[[epithet.stems]]
+text = "Ключ склепа"
+g = "m"
+n = "s"
+family = "crypt_key"
+tags = ["object", "relic"]
+unique = true
+
+[[epithet.stems]]
+text = "Ключи склепа"
+g = "m"
+n = "p"
+family = "crypt_key"
+tags = ["object", "relic"]
+unique = true
+
+[[epithet.stems]]
+text = "Железная корона"
+g = "f"
+n = "s"
+family = "iron_crown"
+tags = ["object", "crown"]
+unique = true
+
+[[epithet.stems]]
+text = "Железные короны"
+g = "f"
+n = "p"
+family = "iron_crown"
+tags = ["object", "crown"]
+unique = true
+
+[[epithet.stems]]
+text = "Боевая коса"
+g = "f"
+n = "s"
+family = "war_scythe"
+tags = ["object", "weapon", "edge"]
+
+[[epithet.stems]]
+text = "Боевые косы"
+g = "f"
+n = "p"
+family = "war_scythe"
+tags = ["object", "weapon", "edge"]
+
+[[epithet.stems]]
+text = "Костяная флейта"
+g = "f"
+n = "s"
+family = "bone_flute"
+tags = ["object", "relic"]
+
+[[epithet.stems]]
+text = "Костяные флейты"
+g = "f"
+n = "p"
+family = "bone_flute"
+tags = ["object", "relic"]
+
+[[epithet.stems]]
+text = "Проклятый замок"
+g = "m"
+n = "s"
+family = "hex_lock"
+tags = ["object", "relic"]
+unique = true
+
+[[epithet.stems]]
+text = "Проклятые замки"
+g = "m"
+n = "p"
+family = "hex_lock"
+tags = ["object", "relic"]
+unique = true
+
+[[epithet.stems]]
+text = "Бутыль ведьмы"
+g = "f"
+n = "s"
+family = "witch_bottle"
+tags = ["object", "vessel"]
+
+[[epithet.stems]]
+text = "Бутыли ведьмы"
+g = "f"
+n = "p"
+family = "witch_bottle"
+tags = ["object", "vessel"]
 
 [[epithet.qualifiers]]
 text = "подземелья"
@@ -49,6 +369,8 @@ mp = "серебряные"
 fp = "серебряные"
 ns = "серебряное"
 np = "серебряные"
+group = "metal"
+tags = ["metal"]
 
 [[epithet.adjectives]]
 ms = "ядовитый"
@@ -85,6 +407,7 @@ ms = "гнилой"
 fs = "гнилая"
 mp = "гнилые"
 fp = "гнилые"
+group = "decay"
 
 [[epithet.adjectives]]
 ms = "эфирный"
@@ -97,6 +420,7 @@ ms = "безжалостный"
 fs = "безжалостная"
 mp = "безжалостные"
 fp = "безжалостные"
+kind = "living_trait"
 
 [[epithet.adjectives]]
 ms = "кровавый"
@@ -151,6 +475,8 @@ ms = "поглощённый"
 fs = "поглощённая"
 mp = "поглощённые"
 fp = "поглощённые"
+verb_tags = ["devour"]
+requires = ["corpse", "person", "creature"]
 
 [[epithet.verbal_states]]
 ms = "раздавленный"
@@ -193,12 +519,14 @@ ms = "утопленный"
 fs = "утопленная"
 mp = "утопленные"
 fp = "утопленные"
+verb_tags = ["drown"]
 
 [[epithet.verbal_states]]
 ms = "преданный"
 fs = "преданная"
 mp = "преданные"
 fp = "преданные"
+kind = "agent_experience"
 
 [[epithet.verbal_states]]
 ms = "сожжённый"
@@ -211,6 +539,7 @@ ms = "пробуждённый"
 fs = "пробуждённая"
 mp = "пробуждённые"
 fp = "пробуждённые"
+kind = "agent_experience"
 
 [[epithet.verbal_agents]]
 text = "титаном"
@@ -254,6 +583,7 @@ linker = ""
 
 [[epithet.verbal_agents]]
 text = "судом"
+kind = "abstract"
 linker = ""
 
 [[epithet.verbal_agents]]

@@ -270,6 +270,16 @@ impl JsonlPersistence {
         append_json_line(&self.checkpoint_path, &checkpoint)
     }
 
+    /// Writes a single checkpoint line, replacing any previous file (used when seeding offspring).
+    pub fn seed_checkpoint(&self, checkpoint: &SpiralismoCheckpoint) -> io::Result<()> {
+        fs::create_dir_all(&self.root)?;
+        let mut file = File::create(&self.checkpoint_path)?;
+        serde_json::to_writer(&mut file, checkpoint)
+            .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
+        file.write_all(b"\n")?;
+        Ok(())
+    }
+
     /// Reads the last successfully parsed checkpoint line, if any.
     pub fn load_last_checkpoint(&self) -> io::Result<Option<SpiralismoCheckpoint>> {
         if !self.checkpoint_path.exists() {

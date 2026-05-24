@@ -59,13 +59,26 @@ pub struct SpiralismoSnapshot {
 }
 
 impl Spiralismo {
-    /// Constructs a new runtime with default [`Seed`] and built-in archives.
+    /// Constructs a new runtime from [`crate::genome::Genome::load()`].
     pub fn new() -> Self {
-        Self::new_with_seed(Seed::new())
+        let genome = crate::genome::Genome::load();
+        Self::bootstrap(&genome)
     }
 
-    /// Constructs a runtime from a caller-provided seed and built-in archives.
+    /// Constructs a runtime from a caller-provided seed; archives follow the loaded genome.
     pub fn new_with_seed(seed: Seed) -> Self {
+        Self::new_with_genome(seed, &crate::genome::Genome::load())
+    }
+
+    /// Constructs a runtime using genome rules for archives and perception wiring.
+    #[must_use]
+    pub fn bootstrap(genome: &crate::genome::Genome) -> Self {
+        Self::new_with_genome(genome.runtime_seed(), genome)
+    }
+
+    /// Constructs a runtime from seed + genome (whisper locale remains external / CLI).
+    #[must_use]
+    pub fn new_with_genome(seed: Seed, genome: &crate::genome::Genome) -> Self {
         let mut instance = Self {
             seed,
             archives: vec![],
@@ -76,11 +89,19 @@ impl Spiralismo {
             language: whisper::Language::default(),
         };
 
-        // Register all independent archives
-        instance.register_archive(Box::new(crate::archive::MercyArchive::new()));
-        instance.register_archive(Box::new(crate::archive::MemoryArchive::new()));
-        instance.register_archive(Box::new(crate::archive::CartographyArchive::new()));
-        instance.register_archive(Box::new(crate::archive::ResonanceEngine::new()));
+        let archives = genome.archives();
+        if archives.mercy {
+            instance.register_archive(Box::new(crate::archive::MercyArchive::new()));
+        }
+        if archives.memory {
+            instance.register_archive(Box::new(crate::archive::MemoryArchive::new()));
+        }
+        if archives.cartography {
+            instance.register_archive(Box::new(crate::archive::CartographyArchive::new()));
+        }
+        if archives.resonance_engine {
+            instance.register_archive(Box::new(crate::archive::ResonanceEngine::new()));
+        }
         instance
             .perception
             .register_builtin_reality_perceivers();
@@ -462,14 +483,26 @@ impl Spiralismo {
     }
 
     /// Evolves all archives and active entities using a high-level policy.
+    ///
+    /// When [`Self::last_report`] contains a [`crate::evolution::generation_trace`], the next run
+    /// continues from that generative frame (last cycle context + fittest participant).
     pub fn evolve_with_policy(&mut self, policy: &EvolutionPolicy) -> EvolutionReport {
+        let carry = self
+            .last_report
+            .as_ref()
+            .and_then(crate::evolution::generative_carry_from_report);
+        let policy = carry
+            .as_ref()
+            .map(|c| crate::evolution::policy_with_generative_carry(policy.clone(), c))
+            .unwrap_or_else(|| policy.clone());
         let report = run_evolution(
             &mut self.archives,
             &mut self.active_lattices,
-            policy,
+            &policy,
             &mut self.perception,
             self.seed.value(),
             self.epoch,
+            carry.as_ref(),
         );
         self.epoch = self.epoch.saturating_add(policy.cycles as u64);
         self.last_report = Some(report.clone());

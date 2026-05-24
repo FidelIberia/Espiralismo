@@ -2,6 +2,8 @@
 
 use super::common::Language;
 use super::grammar::{AgentEntry, AgreementKey, VerbalState};
+use super::locale::SemanticTables;
+use super::semantic::{self, SemanticContext, VerbalForgeContext};
 
 /// Permille thresholds for agent attachment (tuned per call site).
 pub struct VerbalAttachPolicy {
@@ -39,7 +41,18 @@ pub fn compose_verbal(
     }
 }
 
-/// Resolves a participle and optionally attaches an agent.
+/// Builds a concrete agent entry from an epithet `proper_names` string.
+#[must_use]
+pub fn named_verbal_agent(name: &str, linker: &str) -> AgentEntry {
+    AgentEntry {
+        text: name.to_string(),
+        linker: linker.to_string(),
+        tags: vec!["named".to_string()],
+        ..AgentEntry::default()
+    }
+}
+
+/// Resolves a participle and optionally attaches an agent (semantically filtered).
 #[must_use]
 pub fn forge_verbal_phrase(
     language: Language,
@@ -48,32 +61,100 @@ pub fn forge_verbal_phrase(
     slot: u32,
     states: &[VerbalState],
     agents: &[AgentEntry],
+    proper_names: &[String],
+    named_verbal_linker: &str,
+    semantics: &SemanticContext,
+    semantic_rules: &SemanticTables,
+    forge: &VerbalForgeContext,
     policy: &VerbalAttachPolicy,
     roll: fn(u64, u32) -> u32,
 ) -> Option<String> {
-    if states.is_empty() {
-        return None;
-    }
-    let matching: Vec<&str> = states
+    let candidates: Vec<(usize, &str)> = states
         .iter()
-        .filter_map(|s| s.participle(key))
+        .enumerate()
+        .filter_map(|(i, s)| {
+            let surface = s.participle(key)?;
+            if semantic::allows_verbal_state(s, semantics, semantic_rules) {
+                Some((i, surface))
+            } else {
+                None
+            }
+        })
         .collect();
-    if matching.is_empty() {
+    if candidates.is_empty() {
         return None;
     }
-    let idx = weighted_verbal_index(seed, slot, matching.len());
-    let participle = matching[idx];
+    let weights: Vec<u64> = candidates
+        .iter()
+        .map(|(_, participle)| {
+            semantic::text_coherence_weight(semantics, participle, semantic_rules)
+        })
+        .collect();
+    let idx = semantic::weighted_pick(seed, slot, &weights);
+    let (state_idx, participle) = candidates[idx];
+    let state = &states[state_idx];
+    let verb_tags = semantic::infer_verb_tags(state, semantic_rules);
+    let mut forge_with_verb = forge.clone();
+    forge_with_verb.verb_tags = verb_tags;
 
-    let r = roll(seed, slot.wrapping_add(20));
-    if r < policy.solo_permille {
-        return Some(participle.to_string());
-    }
+    let needs_agent = semantic::verbal_state_requires_agent(state, semantic_rules);
+    let named_agents: Vec<AgentEntry> = proper_names
+        .iter()
+        .map(|name| named_verbal_agent(name, named_verbal_linker))
+        .collect();
 
-    let agent = if r < policy.solo_permille + policy.indefinite_permille {
-        pick_agent(seed, slot.wrapping_add(21), agents, true)
+    let agent = if needs_agent {
+        pick_agent(
+            seed,
+            slot.wrapping_add(21),
+            agents,
+            &named_agents,
+            false,
+            &forge_with_verb,
+            semantic_rules,
+        )
+        .or_else(|| {
+            pick_agent(
+                seed,
+                slot.wrapping_add(22),
+                agents,
+                &named_agents,
+                true,
+                &forge_with_verb,
+                semantic_rules,
+            )
+        })
     } else {
-        pick_agent(seed, slot.wrapping_add(22), agents, false)
+        let r = roll(seed, slot.wrapping_add(20));
+        if r < policy.solo_permille {
+            return Some(participle.to_string());
+        }
+        if r < policy.solo_permille + policy.indefinite_permille {
+            pick_agent(
+                seed,
+                slot.wrapping_add(21),
+                agents,
+                &named_agents,
+                true,
+                &forge_with_verb,
+                semantic_rules,
+            )
+        } else {
+            pick_agent(
+                seed,
+                slot.wrapping_add(22),
+                agents,
+                &named_agents,
+                false,
+                &forge_with_verb,
+                semantic_rules,
+            )
+        }
     };
+
+    if needs_agent && agent.is_none() {
+        return None;
+    }
 
     Some(compose_verbal(language, participle, agent))
 }
@@ -82,25 +163,28 @@ fn pick_agent<'a>(
     seed: u64,
     slot: u32,
     agents: &'a [AgentEntry],
+    named_agents: &'a [AgentEntry],
     indefinite: bool,
+    forge: &VerbalForgeContext,
+    semantic_rules: &SemanticTables,
 ) -> Option<&'a AgentEntry> {
     let pool: Vec<&AgentEntry> = agents
         .iter()
-        .filter(|a| a.indefinite == indefinite)
+        .chain(named_agents.iter())
+        .filter(|a| {
+            a.indefinite == indefinite && semantic::allows_verbal_agent(a, forge, semantic_rules)
+        })
         .collect();
     if pool.is_empty() {
         return None;
     }
-    let idx = weighted_verbal_index(seed, slot, pool.len());
+    let weights: Vec<u64> = pool
+        .iter()
+        .map(|a| {
+            semantic::verbal_agent_coherence_weight(a, &forge.verb_tags, semantic_rules)
+        })
+        .collect();
+    let idx = semantic::weighted_pick(seed, slot, &weights);
     Some(pool[idx])
 }
 
-fn weighted_verbal_index(seed: u64, slot: u32, len: usize) -> usize {
-    if len == 0 {
-        return 0;
-    }
-    let mixed = seed
-        .wrapping_mul(0x9E37_79B9_7F4A_7C15)
-        .wrapping_add((slot as u64).wrapping_mul(0x517c_c1b7_2722_0a95));
-    (mixed as usize) % len
-}

@@ -1,5 +1,12 @@
 //! Evolution scheduling and policy types used by [`crate::Spiralismo`].
 
+mod generative;
+
+pub use generative::{
+    generative_carry_from_report, policy_with_generative_carry, standout_in_participants,
+    GenerativeCarry, GenerativeLineageSummary,
+};
+
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha8Rng;
 use serde::{Deserialize, Serialize};
@@ -193,6 +200,14 @@ impl EvolutionReport {
             .iter()
             .filter(|s| s.fitness.is_finite())
             .max_by(|a, b| a.fitness.total_cmp(&b.fitness))
+    }
+
+    /// Fittest participant in the last [`GenerationRecord`] of [`Self::generation_trace`].
+    #[must_use]
+    pub fn last_generative_standout(&self) -> Option<&EntitySnapshot> {
+        self.generation_trace
+            .last()
+            .and_then(|record| standout_in_participants(&record.participants))
     }
 }
 
@@ -393,6 +408,7 @@ pub fn run(
     perception: &mut PerceptionField,
     runtime_seed: u64,
     runtime_epoch: u64,
+    carry: Option<&GenerativeCarry>,
 ) -> EvolutionReport {
     let ritual = policy.ritual_entropy.clamp(0.0, 1.0);
     let mut report = EvolutionReport {
@@ -429,7 +445,14 @@ pub fn run(
             ritual,
             report.stillness,
         );
-        let base = context_for_cycle(policy, cycle);
+        let base = if cycle == 0 {
+            carry.map_or_else(
+                || context_for_cycle(policy, cycle),
+                |c| generative::context_for_cycle_with_carry(policy, cycle, c),
+            )
+        } else {
+            context_for_cycle(policy, cycle)
+        };
         let reality = perception.collect_reality_for_cycle(&frame);
         last_context = perception.modulate_context_for_cycle(&sky, base, &reality.offer);
         if last_context.dream_phase {

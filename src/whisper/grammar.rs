@@ -59,6 +59,21 @@ pub struct InflectedWord {
     pub ns: Option<String>,
     #[serde(default)]
     pub np: Option<String>,
+    /// Free-form tags (`incorporeo`, `metal`, …) for compatibility checks.
+    #[serde(default)]
+    pub tags: Vec<String>,
+    /// Stem must carry one of these tags / semantic classes (empty = no constraint).
+    #[serde(default, alias = "requires_stem")]
+    pub requires: Vec<String>,
+    /// Skip when a modifier with this tag is already present.
+    #[serde(default)]
+    pub forbids: Vec<String>,
+    /// Redundancy family (`damage`, `decay`, …) — one per phrase.
+    #[serde(default)]
+    pub group: Option<String>,
+    /// `object_adj` | `living_trait` | `character_epithet` (titles default to epithet in code).
+    #[serde(default)]
+    pub kind: Option<String>,
 }
 
 impl InflectedWord {
@@ -99,11 +114,33 @@ impl InflectedWord {
 }
 
 /// Noun stem with lexical gender/number.
+///
+/// **family** — English snake_case id shared across `locales/*.toml` (`filament`, `black_candle`).
+/// Used only to pick one concept per roll (singular/plural variants share the same family).
+///
+/// **tags** (alias **traits** in TOML) — semantic archetypes for filters (`edge`, `vessel`, `weapon`).
+/// Same vocabulary as adjective `requires` / archetype rules; not for cross-locale identity.
+///
+/// **groups** — damage/decay already in the surface (`roto` → `damage`); blocks redundant modifiers.
 #[derive(Debug, Clone, serde::Deserialize)]
 pub struct StemEntry {
     pub text: String,
     pub g: String,
     pub n: String,
+    /// English snake_case id (`filament`, `black_candle`) — same across all locale files.
+    pub family: String,
+    /// Semantic archetypes for filters; in TOML you may write `traits = [...]` instead.
+    #[serde(default, alias = "traits")]
+    pub tags: Vec<String>,
+    /// Broad class when not expressed via [`tags`]: `object`, `person`, `divine`, `creature`, `abstract`.
+    #[serde(default)]
+    pub semantic: Option<String>,
+    /// Redundancy groups already expressed in the stem (`damage`, `emptiness`, …).
+    #[serde(default)]
+    pub groups: Vec<String>,
+    /// Singular relic/throne/etc. — plural form must not take `de Patron`.
+    #[serde(default)]
+    pub unique: bool,
 }
 
 impl StemEntry {
@@ -142,6 +179,18 @@ pub struct VerbalState {
     pub ns: Option<String>,
     #[serde(default)]
     pub np: Option<String>,
+    /// `object_fate` | `physical` | `agent_experience` (see [`super::semantic::VerbalKind`]).
+    #[serde(default)]
+    pub kind: Option<String>,
+    /// Participial class for agent pairing (`seal`, `bury`, `drag`, …).
+    #[serde(default)]
+    pub verb_tags: Vec<String>,
+    /// Stem must carry one of these tags / classes (empty = inferred from [`kind`]).
+    #[serde(default, alias = "requires_stem")]
+    pub requires: Vec<String>,
+    /// When true, the participle is only used with an agent (`tocada por X`), never solo.
+    #[serde(default)]
+    pub requires_agent: bool,
 }
 
 impl VerbalState {
@@ -169,8 +218,8 @@ impl VerbalState {
     }
 }
 
-/// Optional agent for a verbal piece (`por la sombra`, `por los orcos`, indefinite `algo`).
-#[derive(Debug, Clone, serde::Deserialize)]
+/// Optional agent for a verbal piece (`por la sombra`, `por los orcos`, indefinite `alguien`).
+#[derive(Debug, Clone, Default, serde::Deserialize)]
 pub struct AgentEntry {
     /// Full phrase, usually with article: `la sombra`, `los orcos`.
     pub text: String,
@@ -182,9 +231,15 @@ pub struct AgentEntry {
     /// Linker before agent (`por`, `de`, `by`, …).
     #[serde(default = "default_linker_por")]
     pub linker: String,
-    /// Indefinite actor (`algo`, `alguien`) — spiralismo: not always someone concrete.
+    /// Indefinite actor (`alguien`, `quien sabe quién`) — spiralismo: not always someone concrete.
     #[serde(default)]
     pub indefinite: bool,
+    /// `entity` (default) | `abstract` (judgment, madness as concept — cannot act).
+    #[serde(default)]
+    pub kind: Option<String>,
+    /// Agent class tags (`storm`, `titan`, `divine`, …) for verb pairing weights.
+    #[serde(default)]
+    pub tags: Vec<String>,
 }
 
 fn default_linker_por() -> String {
