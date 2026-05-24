@@ -13,12 +13,13 @@ use crate::archive::{CartographyArchive, MercyArchive, MemoryArchive, ResonanceE
 use crate::core::traits::SpiralEntity;
 use crate::core::{Lattice, Seed};
 use crate::evolution::EvolutionReport;
+use crate::genome::{Genome, GenomeFile};
 use crate::glyphs::GlyphField;
 use crate::perception::{PerceptionField, SoulState};
 use crate::spiralismo::Spiralismo;
 
 /// Schema version stored in [`SpiralismoCheckpoint::schema_version`].
-pub const SPIRALISMO_CHECKPOINT_SCHEMA: u32 = 1;
+pub const SPIRALISMO_CHECKPOINT_SCHEMA: u32 = 2;
 
 /// Default filename inside the artifact directory.
 pub const CHECKPOINT_JSONL: &str = "checkpoint.jsonl";
@@ -88,6 +89,13 @@ pub struct SpiralismoCheckpoint {
     /// Soul (`alma`) at save time — absent on older checkpoints defaults to empty soul.
     #[serde(default)]
     pub soul: SoulState,
+    /// Full runtime genome after the last evolution assimilated the generative line.
+    #[serde(default = "default_checkpoint_genome")]
+    pub genome: GenomeFile,
+}
+
+fn default_checkpoint_genome() -> GenomeFile {
+    Genome::embedded().file
 }
 
 /// Serializable wrapper for a built-in archive.
@@ -109,8 +117,8 @@ pub enum CheckpointActiveEntity {
 }
 
 impl SpiralismoCheckpoint {
-    /// Captures the full runtime state.
-    pub fn capture(spiral: &Spiralismo) -> Result<Self, CheckpointError> {
+    /// Captures the full runtime state and the active [`Genome`].
+    pub fn capture(spiral: &Spiralismo, genome: &Genome) -> Result<Self, CheckpointError> {
         Ok(Self {
             schema_version: SPIRALISMO_CHECKPOINT_SCHEMA,
             saved_at: Utc::now(),
@@ -121,12 +129,19 @@ impl SpiralismoCheckpoint {
             active_entities: capture_active_entities(spiral)?,
             whisper: Some(spiral.whisper_now()),
             soul: spiral.perception.soul().clone(),
+            genome: genome.file.clone(),
         })
+    }
+
+    /// Genome stored in this checkpoint (embedded defaults for schema v1 lines).
+    #[must_use]
+    pub fn resolved_genome(&self) -> Genome {
+        Genome::from_file(self.genome.clone())
     }
 
     /// Rebuilds a [`Spiralismo`] from this checkpoint.
     pub fn into_spiralismo(self) -> Result<Spiralismo, CheckpointError> {
-        if self.schema_version != SPIRALISMO_CHECKPOINT_SCHEMA {
+        if self.schema_version != SPIRALISMO_CHECKPOINT_SCHEMA && self.schema_version != 1 {
             return Err(CheckpointError::UnsupportedSchema(self.schema_version));
         }
 
@@ -259,25 +274,15 @@ impl JsonlPersistence {
         &self.checkpoint_path
     }
 
-    /// Appends one full checkpoint line for the current runtime.
-    pub fn append_checkpoint(&self, spiral: &Spiralismo) -> io::Result<()> {
-        let checkpoint = SpiralismoCheckpoint::capture(spiral).map_err(|error| {
+    /// Appends one full checkpoint line for the current runtime and genome.
+    pub fn append_checkpoint(&self, spiral: &Spiralismo, genome: &Genome) -> io::Result<()> {
+        let checkpoint = SpiralismoCheckpoint::capture(spiral, genome).map_err(|error| {
             io::Error::new(
                 io::ErrorKind::InvalidInput,
                 format!("could not build checkpoint: {error}"),
             )
         })?;
         append_json_line(&self.checkpoint_path, &checkpoint)
-    }
-
-    /// Writes a single checkpoint line, replacing any previous file (used when seeding offspring).
-    pub fn seed_checkpoint(&self, checkpoint: &SpiralismoCheckpoint) -> io::Result<()> {
-        fs::create_dir_all(&self.root)?;
-        let mut file = File::create(&self.checkpoint_path)?;
-        serde_json::to_writer(&mut file, checkpoint)
-            .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
-        file.write_all(b"\n")?;
-        Ok(())
     }
 
     /// Reads the last successfully parsed checkpoint line, if any.

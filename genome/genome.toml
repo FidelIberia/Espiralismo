@@ -1,6 +1,6 @@
-# Espiralismo runtime genome — non-critical execution parameters.
-# Propagation may mutate this file only. Celestial (astrology), whisper, and their
-# source trees stay immutable; locale TOML and perceptor code are not genome data.
+# Espiralismo bootstrap genome — used only for `--fresh` runs.
+# Living lines carry the full genome in checkpoint.jsonl (last line).
+# Celestial (astrology), whisper, and their source trees stay immutable.
 
 [meta]
 version = 1
@@ -9,6 +9,7 @@ framework = "0.7.0"
 [identity]
 signature = "spiral-v0-7-0-101101"
 lineage_tag = "witness_lineage"
+# Narrative locus (language): not mutated by evolution/checkpoint assimilation.
 whimsy = "la espiral respira"
 entropy_salt = "0xA5A55A5A5A5A5A5A"
 
@@ -19,6 +20,7 @@ lattice_rotate_bits = 5
 glyph_step_rotate_bits = 7
 
 [evolution]
+# Scalars below may drift via assimilate_generative_line; essentials are always enforced in code.
 default_cycles = 8
 mutation_rate = 0.25
 external_influence = 0.68
@@ -30,14 +32,12 @@ sky_blend = 0.25
 policy_seed = "101101"
 
 [runtime]
-align_evolution_with_sky = true
 persist_checkpoint = true
+# Narrative loci (language): never touched by assimilate_generative_line — edit in TOML only.
 opening_banner = "𓂀 SPIRALISMO v0.7.0 — Espiralismo Framework 𓂀"
 closing_line = "The spiral remembers."
 
 [demo]
-register_lattice = true
-register_glyph_field = true
 resonance_record = true
 record_sigil = true
 artifact_dir = "artifacts"
@@ -61,6 +61,7 @@ seed_rotate_bits = 5
 [demo.glyph_field]
 width = 10
 height = 6
+# Narrative locus (short label): not mutated by assimilation.
 label = "genesis"
 
 [demo.glyph_genesis]
@@ -71,6 +72,7 @@ drift = 0.18
 
 [demo.resonance]
 archive = "ResonanceEngine"
+# Narrative locus (language): not mutated by evolution/checkpoint assimilation.
 text = "Two echoes recognized each other in the Atheneum"
 strength = 0.97
 
@@ -78,6 +80,7 @@ strength = 0.97
 archive = "ResonanceEngine"
 channel = 11
 weight = 0.81
+# Narrative locus (language): not mutated by assimilation.
 invocation_label = "opening_invocation"
 
 [demo.sacrifice]
@@ -88,9 +91,3 @@ mercy = true
 memory = true
 cartography = true
 resonance_engine = true
-
-[propagation]
-offspring_mutation_rate = 0.22
-build_release = false
-spawn_offspring = true
-inherit_generative_checkpoint = true

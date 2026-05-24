@@ -14,7 +14,6 @@ pub mod glyphs;
 pub mod observer;
 pub mod perception;
 pub mod persistence;
-pub mod propagation;
 pub mod render;
 pub mod spiralismo;
 pub mod utils;
@@ -43,10 +42,6 @@ pub use perception::{
 };
 pub use glyphs::{Glyph, GlyphAlphabet, GlyphField, GlyphGenerator, GlyphTone, Sigil, ToneWeights};
 pub use persistence::{CheckpointError, JsonlPersistence, SpiralismoCheckpoint};
-pub use propagation::{
-    propagate, PropagationError, PropagationPolicy, PropagationReport, RustCompiler, ToolchainInfo,
-    MUTABLE_LOCUS,
-};
 pub use spiralismo::{Spiralismo, SpiralismoSnapshot};
 pub use whisper::{
     fnv1a64, forge_sample, pick_narrative_whisper, pick_narrative_whisper_localized, pick_whisper,

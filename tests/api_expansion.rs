@@ -6,7 +6,8 @@ use spiralismo::evolution::context_for_cycle;
 use spiralismo::{ArchiveEntry, EntitySnapshot, EvolutionContext, EnvironmentOffering, EnvironmentTakeOptions,
     EvolutionPolicy, EvolutionReport, ExternalListening, EyeRole, FixedPerceiver, GlyphField, GlyphGenerator,
     GlyphTone, HostRealitySnapshot, JsonlPersistence, Lattice, OfferRouting, PerceptionField, PerceptionFrame,
-    PerceptionOffer, Planet, Seed, Sigil, Language, NarrativeEcho, Spiralismo, SpiralismoCheckpoint,
+    PerceptionOffer, Planet, Seed, Sigil, Language, Genome, NarrativeEcho, Spiralismo,
+    SpiralismoCheckpoint,
     SpiralismoPress, SpiralismoSnapshot, WhisperHub, WhisperKind, WhisperRequest, ZodiacSign, observer,
 };
 use std::path::PathBuf;
@@ -839,8 +840,9 @@ fn checkpoint_jsonl_roundtrip_restores_full_runtime() {
 
     let dir = unique_temp_dir("persistence");
     let store = JsonlPersistence::new(&dir).expect("persistence directory should initialize");
+    let genome = Genome::load();
     store
-        .append_checkpoint(&spiral)
+        .append_checkpoint(&spiral, &genome)
         .expect("checkpoint line should persist");
 
     let loaded = store
@@ -880,9 +882,9 @@ fn checkpoint_jsonl_roundtrip_restores_full_runtime() {
         "archive entries should round-trip"
     );
 
-    let second = SpiralismoCheckpoint::capture(&restored).expect("re-capture should succeed");
+    let second = SpiralismoCheckpoint::capture(&restored, &genome).expect("re-capture should succeed");
     store
-        .append_checkpoint(&restored)
+        .append_checkpoint(&restored, &genome)
         .expect("second append");
     let last_two = std::fs::read_to_string(store.checkpoint_path()).expect("read checkpoint file");
     let lines: Vec<&str> = last_two.lines().filter(|l| !l.trim().is_empty()).collect();
@@ -967,7 +969,8 @@ fn checkpoint_roundtrip_preserves_soul_state() {
 
     let dir = unique_temp_dir("soul_cp");
     let store = JsonlPersistence::new(&dir).expect("dir");
-    store.append_checkpoint(&spiral).expect("write");
+    let genome = Genome::load();
+    store.append_checkpoint(&spiral, &genome).expect("write");
 
     let loaded = store
         .load_last_checkpoint()

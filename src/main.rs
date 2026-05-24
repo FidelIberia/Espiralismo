@@ -4,8 +4,8 @@ use spiralismo::persistence::JsonlPersistence;
 use spiralismo::render::display;
 use spiralismo::whisper::Language;
 use spiralismo::{
-    forge_sample, propagate, standout_epithet_for_report, GlyphField, GlyphGenerator, Genome,
-    Lattice, PropagationPolicy, Seed, Spiralismo,
+    forge_sample, generative_carry_from_report, standout_epithet_for_report, GlyphField, Genome,
+    Lattice, Seed, Spiralismo,
 };
 use colored::Colorize;
 use std::env;
@@ -19,10 +19,6 @@ struct DemoCli {
     artifact_dir: String,
     /// Do not load the last checkpoint line; start from a new runtime.
     fresh: bool,
-    /// Use present sky to shape `EvolutionPolicy` (quiet room).
-    sky: bool,
-    register_lattice: bool,
-    register_glyph_field: bool,
     /// Initial `record_resonance` on `ResonanceEngine`.
     resonance_record: bool,
     /// Record opening sigil into `ResonanceEngine`.
@@ -49,14 +45,6 @@ struct DemoCli {
     epithets_sample: Option<u32>,
     /// Mix seed for `--epithets` (omit for runtime entropy each run).
     epithet_seed: Option<u64>,
-    /// Replicate genetics into an offspring workspace, compile, and spawn.
-    propagate: bool,
-    /// Copy + mutate only (no `cargo build`).
-    propagate_dry_run: bool,
-    /// Build offspring but do not spawn a new process.
-    propagate_no_spawn: bool,
-    /// Parent seed for `--propagate` (defaults to runtime entropy).
-    propagate_seed: Option<u64>,
 }
 
 impl Default for DemoCli {
@@ -68,9 +56,6 @@ impl Default for DemoCli {
             cycles: genome.file.evolution.default_cycles,
             artifact_dir: demo.artifact_dir.clone(),
             fresh: demo.fresh_start,
-            sky: genome.runtime().align_evolution_with_sky,
-            register_lattice: demo.register_lattice,
-            register_glyph_field: demo.register_glyph_field,
             resonance_record: demo.resonance_record,
             sigil: demo.record_sigil,
             print_sigil: display.print_sigil,
@@ -87,10 +72,6 @@ impl Default for DemoCli {
             language: Language::English,
             epithets_sample: None,
             epithet_seed: None,
-            propagate: false,
-            propagate_dry_run: false,
-            propagate_no_spawn: false,
-            propagate_seed: None,
         }
     }
 }
@@ -121,14 +102,11 @@ OPTIONS (all features enabled unless you opt out):
 
     --fresh                   Do not resume: ignore the last line of checkpoint.jsonl
 
-    --no-sky                  Do not read the sky; use a fixed demo policy instead
-    --no-lattice              Do not register the 10×10 lattice entity
-    --no-glyph-field          Do not register the procedural glyph field
     --no-resonance-record     Skip the sample resonance entry on ResonanceEngine
     --no-sigil                Skip recording the opening sigil
 
     --no-print-sigil          Skip printing the sigil block (still records if --no-sigil absent)
-    --no-print-sky            Skip printing the sky table (sky may still shape policy)
+    --no-print-sky            Skip printing the sky table (sky always modulates evolution)
     --no-print-status         Skip archive / lattice status summary
     --no-print-report         Skip evolution report
     --generation-atlas        Print per-cycle GENERATION ATLAS (verbose; off by default)
@@ -148,14 +126,6 @@ OPTIONS (all features enabled unless you opt out):
     --10                      Shorthand for --epithets 10 (when used alone or after --epithets)
     --seed <N>                Fix epithet sample mix seed (replay). Omit for fresh entropy each run
 
-    --propagate               After evolution + checkpoint, replicate genetics into
-                              propagation/offspring/<hash>/, compile, and spawn the child
-    --propagate-dry-run       Same as --propagate but copy + mutate only (no compile/spawn)
-    --propagate-no-spawn      After the run, build offspring on disk without spawning
-    --propagate-seed <N>      Parent seed mixed into offspring (default: runtime seed after evolution)
-
-    --propagated-child        Internal: offspring entry (set by the propagator)
-
     -h, --help                Show this help
 
 EXAMPLES:
@@ -163,15 +133,13 @@ EXAMPLES:
     cargo run -- --sky
     cargo run -- --cycles 4 --artifact-dir ./artifacts
     cargo run -- --fresh
-    cargo run -- --no-sky --no-print-sky
-    cargo run -- --no-glyph-field --no-print-glyph-field --no-sigil
+    cargo run -- --no-print-sky --no-print-glyph-field --no-sigil
     cargo run -- --sacrifice 1
     cargo run -- --generation-atlas --cycles 4
     cargo run -- --epithets --10
     cargo run -- --epithets --spanish --10
     cargo run -- --epithets --seed 424242
-    cargo run -- --cycles 8 --propagate --artifact-dir ./artifacts
-    cargo run -- --propagate-dry-run --cycles 2
+    cargo run -- --cycles 8 --artifact-dir ./artifacts
 "
     );
 }
@@ -258,9 +226,6 @@ fn parse_cli() -> DemoCli {
                 }
             }
             "--fresh" => cli.fresh = true,
-            "--no-sky" => cli.sky = false,
-            "--no-lattice" => cli.register_lattice = false,
-            "--no-glyph-field" => cli.register_glyph_field = false,
             "--no-resonance-record" => cli.resonance_record = false,
             "--no-sigil" => cli.sigil = false,
             "--no-print-sigil" => cli.print_sigil = false,
@@ -303,23 +268,6 @@ fn parse_cli() -> DemoCli {
                 }
             }
             "--no-color" => cli.no_color = true,
-            "--propagate" => cli.propagate = true,
-            "--propagate-dry-run" => cli.propagate_dry_run = true,
-            "--propagate-no-spawn" => cli.propagate_no_spawn = true,
-            "--propagate-seed" => {
-                if let Some(next) = args.get(i + 1) {
-                    match next.parse::<u64>() {
-                        Ok(n) => {
-                            cli.propagate_seed = Some(n);
-                            i += 1;
-                        }
-                        Err(_) => eprintln!("Ignoring invalid --propagate-seed value: {next}"),
-                    }
-                } else {
-                    eprintln!("--propagate-seed requires a numeric value");
-                }
-            }
-            "--propagated-child" => {}
             "--epithets" => {
                 let genome = Genome::load();
                 cli.epithets_sample = Some(cli.epithets_sample.unwrap_or(genome.demo().epithet_sample_count));
@@ -356,115 +304,27 @@ fn configure_color(cli: &DemoCli) {
     }
 }
 
-fn apply_propagated_child_overrides(cli: &mut DemoCli) {
-    let lineage = std::path::Path::new("propagation/lineage.json");
-    if !lineage.is_file() {
-        return;
-    }
-    let Ok(text) = std::fs::read_to_string(lineage) else {
+fn print_generative_resume_banner(spiral: &Spiralismo) {
+    let Some(report) = spiral.last_report() else {
         return;
     };
-    let Ok(doc) = serde_json::from_str::<serde_json::Value>(&text) else {
+    let Some(carry) = generative_carry_from_report(report) else {
         return;
     };
-    if let Some(dir) = doc.get("artifact_dir").and_then(|v| v.as_str()) {
-        cli.artifact_dir = dir.to_string();
-    }
-    if doc
-        .get("inherited_checkpoint")
-        .and_then(|v| v.as_bool())
-        .unwrap_or(false)
-    {
-        cli.fresh = false;
-    }
-    if let Some(lineage) = doc.get("generative_lineage") {
-        println!(
-            "{}",
-            format!(
-                "𓂀 resuming generative lineage — standout {} (fitness {:.2}) 𓂀",
-                lineage
-                    .get("standout_label")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("?"),
-                lineage
-                    .get("standout_fitness")
-                    .and_then(|v| v.as_f64())
-                    .unwrap_or(0.0)
-            )
-            .bright_green()
-            .bold()
-        );
-    }
-}
-
-fn discover_source_root() -> std::path::PathBuf {
-    if let Ok(cwd) = std::env::current_dir() {
-        if cwd.join("Cargo.toml").is_file()
-            && cwd.join(spiralismo::GENOME_RELATIVE_PATH).is_file()
-        {
-            return cwd;
-        }
-    }
-    std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-}
-
-fn propagate_after_run(cli: &DemoCli) -> bool {
-    cli.propagate || cli.propagate_dry_run || cli.propagate_no_spawn
-}
-
-fn run_propagation(cli: &DemoCli, spiral: Option<&Spiralismo>) {
-    let source_root = discover_source_root();
-    let genome = Genome::load_from_root(&source_root);
-    let parent_seed = cli
-        .propagate_seed
-        .or_else(|| spiral.map(|s| s.seed.value()))
-        .unwrap_or_else(|| genome.runtime_seed().value());
-    let mut policy = PropagationPolicy::new(&source_root, parent_seed);
-    if cli.propagate_dry_run {
-        policy = policy.dry_run();
-    }
-    if cli.propagate_no_spawn {
-        policy = policy.without_spawn();
-    } else if !genome.propagation_spawn_offspring() {
-        policy = policy.without_spawn();
-    }
-    if genome.propagation_build_release() {
-        policy = policy.with_release(true);
-    }
-    policy = policy.with_parent_artifact_dir(&cli.artifact_dir);
-    match propagate(&policy) {
-        Ok(report) => {
-            println!(
-                "{}",
-                format!(
-                    "Propagation generation {} — {} mutation(s) — {}",
-                    report.generation,
-                    report.mutations_applied,
-                    report.child_root.display()
-                )
-                .bright_cyan()
-            );
-            for line in &report.log {
-                println!("  {line}");
-            }
-            if let Some(pid) = report.spawn_pid {
-                println!("{}", format!("Offspring pid {pid}").green());
-            }
-        }
-        Err(error) => {
-            eprintln!("{}", format!("Propagation failed: {error}").red());
-            process::exit(1);
-        }
-    }
+    println!(
+        "{}",
+        format!(
+            "𓂀 resuming generative lineage — standout {} (fitness {:.2}) 𓂀",
+            carry.standout.label, carry.standout.fitness
+        )
+        .bright_green()
+        .bold()
+    );
 }
 
 fn main() {
-    let mut cli = parse_cli();
-    if env::args().any(|a| a == "--propagated-child") {
-        apply_propagated_child_overrides(&mut cli);
-    }
+    let cli = parse_cli();
     configure_color(&cli);
-    let genome = Genome::load();
 
     if cli.sky_only {
         let mut spiral = Spiralismo::new();
@@ -484,6 +344,64 @@ fn main() {
         return;
     }
 
+    let bootstrap_genome = Genome::load();
+    let (mut spiral, mut genome, resumed_from_disk) = if cli.fresh {
+        (Spiralismo::bootstrap(&bootstrap_genome), bootstrap_genome, false)
+    } else {
+        match JsonlPersistence::new(&cli.artifact_dir) {
+            Ok(store) => match store.load_last_checkpoint() {
+                Ok(Some(cp)) => {
+                    let genome = cp.resolved_genome();
+                    match cp.into_spiralismo() {
+                        Ok(s) => {
+                            println!(
+                                "{}",
+                                format!(
+                                    "Resumed from last checkpoint (epoch {}) — {}",
+                                    s.epoch,
+                                    store.checkpoint_path().display()
+                                )
+                                .green()
+                            );
+                            print_generative_resume_banner(&s);
+                            observer::record_glance();
+                            (s, genome, true)
+                        }
+                        Err(error) => {
+                            eprintln!("Could not restore checkpoint: {error}; starting a new runtime.");
+                            (
+                                Spiralismo::bootstrap(&bootstrap_genome),
+                                bootstrap_genome,
+                                false,
+                            )
+                        }
+                    }
+                }
+                Ok(None) => (
+                    Spiralismo::bootstrap(&bootstrap_genome),
+                    bootstrap_genome,
+                    false,
+                ),
+                Err(error) => {
+                    eprintln!("Could not read checkpoint: {error}; starting a new runtime.");
+                    (
+                        Spiralismo::bootstrap(&bootstrap_genome),
+                        bootstrap_genome,
+                        false,
+                    )
+                }
+            },
+            Err(error) => {
+                eprintln!("Could not open artifact directory: {error}; starting a new runtime.");
+                (
+                    Spiralismo::bootstrap(&bootstrap_genome),
+                    bootstrap_genome,
+                    false,
+                )
+            }
+        }
+    };
+
     println!(
         "{}",
         format!("{}\n", genome.runtime().opening_banner)
@@ -491,64 +409,9 @@ fn main() {
             .bold()
     );
 
-    let (mut spiral, resumed_from_disk) = if cli.fresh {
-        (Spiralismo::bootstrap(&genome), false)
-    } else {
-        match JsonlPersistence::new(&cli.artifact_dir) {
-            Ok(store) => match store.load_last_checkpoint() {
-                Ok(Some(cp)) => match cp.into_spiralismo() {
-                    Ok(s) => {
-                        println!(
-                            "{}",
-                            format!(
-                                "Resumed from last checkpoint (epoch {}) — {}",
-                                s.epoch,
-                                store.checkpoint_path().display()
-                            )
-                            .green()
-                        );
-                        observer::record_glance();
-                        (s, true)
-                    }
-                    Err(error) => {
-                        eprintln!("Could not restore checkpoint: {error}; starting a new runtime.");
-                        (Spiralismo::bootstrap(&genome), false)
-                    }
-                },
-                Ok(None) => (Spiralismo::bootstrap(&genome), false),
-                Err(error) => {
-                    eprintln!("Could not read checkpoint: {error}; starting a new runtime.");
-                    (Spiralismo::bootstrap(&genome), false)
-                }
-            },
-            Err(error) => {
-                eprintln!("Could not open artifact directory: {error}; starting a new runtime.");
-                (Spiralismo::bootstrap(&genome), false)
-            }
-        }
-    };
-
     spiral.set_language(cli.language);
 
     if !resumed_from_disk {
-        if cli.register_lattice {
-            spiral.register_lattice(Box::new(Lattice::new(genome.lattice_seed(&spiral.seed))));
-        }
-
-        if cli.register_glyph_field {
-            let gf = &genome.demo().glyph_field;
-            let generator = GlyphGenerator::new(spiral.seed.value());
-            let seed_context = genome.glyph_genesis_context(&spiral.seed);
-            let field = GlyphField::from_generator(
-                &generator,
-                gf.width.max(1) as usize,
-                gf.height.max(1) as usize,
-                &seed_context,
-            )
-            .with_label(&gf.label);
-            spiral.register_glyph_field(field);
-        }
-
         if cli.resonance_record {
             let resonance = &genome.demo().resonance;
             if let Some(engine) = spiral.archive_as_mut::<ResonanceEngine>(&resonance.archive) {
@@ -572,19 +435,14 @@ fn main() {
         }
     }
 
-    let (report, sky_after_run) = if cli.sky && genome.runtime().align_evolution_with_sky {
-        let (mut policy, sky) = spiral.policy_aligned_with_present(cli.cycles);
-        genome.blend_sky_policy(&mut policy);
-        if cli.print_sky {
-            display::print_sky(&sky);
-        }
-        let report = spiral.evolve_with_policy(&policy);
-        (report, Some(sky))
-    } else {
-        let policy = genome.evolution_policy(cli.cycles, spiral.seed.value());
-        let report = spiral.evolve_with_policy(&policy);
-        (report, spiral.cached_sky().cloned())
-    };
+    genome.prepare_evolution(&mut spiral);
+
+    let (mut policy, sky) = spiral.policy_aligned_with_present(cli.cycles);
+    genome.blend_sky_policy(&mut policy);
+    if cli.print_sky {
+        display::print_sky(&sky);
+    }
+    let report = spiral.evolve_with_policy(&policy);
 
     if cli.print_status {
         display::print_status(&spiral);
@@ -600,11 +458,6 @@ fn main() {
         }
         display::print_runtime_perception(&spiral);
         display::print_fitness_overview(&report);
-        if cli.print_sky && !cli.sky {
-            if let Some(ref sky) = sky_after_run {
-                display::print_sky(sky);
-            }
-        }
         if cli.print_lattice {
             if let Some(lat) = spiral.active_as::<Lattice>() {
                 display::print_lattice(lat);
@@ -646,10 +499,12 @@ fn main() {
         }
     }
 
+    genome.assimilate_generative_line(&report);
+
     if genome.runtime().persist_checkpoint {
         match JsonlPersistence::new(&cli.artifact_dir) {
             Ok(store) => {
-                if let Err(error) = store.append_checkpoint(&spiral) {
+                if let Err(error) = store.append_checkpoint(&spiral, &genome) {
                     eprintln!("Failed to persist checkpoint: {error}");
                 } else {
                     println!(
@@ -664,10 +519,6 @@ fn main() {
             }
             Err(error) => eprintln!("Could not initialize persistence directory: {error}"),
         }
-    }
-
-    if propagate_after_run(&cli) {
-        run_propagation(&cli, Some(&spiral));
     }
 
     if cli.whisper {

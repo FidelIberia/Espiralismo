@@ -1,4 +1,4 @@
-//! Generative progression carried across evolution runs and propagation.
+//! Generative progression carried across evolution runs via checkpoint resume.
 
 use crate::core::traits::EntitySnapshot;
 use crate::evolution::{
@@ -19,7 +19,7 @@ pub struct GenerativeCarry {
     pub next_cycle: u32,
 }
 
-/// Scalar summary written into propagation lineage metadata.
+/// Scalar summary of the last generative individual (logging / diagnostics).
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct GenerativeLineageSummary {
     pub standout_label: String,

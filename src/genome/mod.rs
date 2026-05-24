@@ -1,22 +1,68 @@
 //! Runtime **genome** — non-critical Espiralismo parameters (evolution, demo, archives, …).
 //!
-//! **Immutable by design (not encoded here, not mutated in propagation):**
+//! The authoritative genome for a living line lives in the last line of `checkpoint.jsonl`
+//! (see [`crate::persistence::SpiralismoCheckpoint::genome`]). `genome/genome.toml` is only
+//! the bootstrap when starting with `--fresh`.
+//!
+//! **Immutable by design (not encoded in the genome):**
 //! - [`crate::astrology`] (celestial / sky ephemeris)
 //! - [`crate::whisper`] (locales, epithet tables, wisdom)
 //! - `src/perception/` sources (perceptors); sky-aligned policy still flows from perception at runtime
+//!
+//! **Narrative loci** (`opening_banner`, `closing_line`, `identity.whimsy`, `demo.resonance.text`,
+//! `demo.sigil.invocation_label`, `demo.glyph_field.label`, …) are human-language copy. They
+//! round-trip in checkpoints but [`Genome::assimilate_generative_line`] only mutates `[evolution]`
+//! scalars, then restores narrative fields from a snapshot.
+//!
+//! **Evolution essentials** (always on, not user-configurable): sky perception modulates policy;
+//! active [`Lattice`] and [`GlyphField`] before `evolve_with_policy` — see [`Genome::prepare_evolution`].
 
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
+use crate::core::Lattice;
 use crate::core::Seed;
-use crate::evolution::EvolutionPolicy;
+use crate::evolution::{generative_carry_from_report, EvolutionPolicy, EvolutionReport};
+use crate::glyphs::{GlyphField, GlyphGenerator};
+use crate::spiralismo::Spiralismo;
 use crate::EvolutionContext;
 
 /// Canonical relative path from the crate root.
 pub const GENOME_RELATIVE_PATH: &str = "genome/genome.toml";
 
 const EMBEDDED_GENOME: &str = include_str!("../../genome/genome.toml");
+
+/// Human-language genome fields preserved across [`Genome::assimilate_generative_line`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct NarrativeLoci {
+    opening_banner: String,
+    closing_line: String,
+    whimsy: String,
+    resonance_text: String,
+    invocation_label: String,
+    glyph_field_label: String,
+}
+
+fn snapshot_narrative_loci(file: &GenomeFile) -> NarrativeLoci {
+    NarrativeLoci {
+        opening_banner: file.runtime.opening_banner.clone(),
+        closing_line: file.runtime.closing_line.clone(),
+        whimsy: file.identity.whimsy.clone(),
+        resonance_text: file.demo.resonance.text.clone(),
+        invocation_label: file.demo.sigil.invocation_label.clone(),
+        glyph_field_label: file.demo.glyph_field.label.clone(),
+    }
+}
+
+fn restore_narrative_loci(file: &mut GenomeFile, loci: &NarrativeLoci) {
+    file.runtime.opening_banner = loci.opening_banner.clone();
+    file.runtime.closing_line = loci.closing_line.clone();
+    file.identity.whimsy = loci.whimsy.clone();
+    file.demo.resonance.text = loci.resonance_text.clone();
+    file.demo.sigil.invocation_label = loci.invocation_label.clone();
+    file.demo.glyph_field.label = loci.glyph_field_label.clone();
+}
 
 /// Loaded genome (file on disk when present, else embedded defaults).
 #[derive(Debug, Clone)]
@@ -38,8 +84,6 @@ pub struct GenomeFile {
     pub demo: DemoGenes,
     #[serde(default)]
     pub archives: ArchiveGenes,
-    #[serde(default)]
-    pub propagation: PropagationGenes,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -55,7 +99,11 @@ pub struct IdentityGenes {
     pub signature: String,
     pub lineage_tag: String,
     pub whimsy: String,
-    #[serde(default = "default_entropy_salt", deserialize_with = "deserialize_u64")]
+    #[serde(
+        default = "default_entropy_salt",
+        serialize_with = "serialize_u64_compat",
+        deserialize_with = "deserialize_u64_compat"
+    )]
     pub entropy_salt: u64,
 }
 
@@ -85,14 +133,16 @@ pub struct EvolutionGenes {
     pub stillness: f32,
     #[serde(default = "default_sky_blend")]
     pub sky_blend: f32,
-    #[serde(default = "default_policy_seed", deserialize_with = "deserialize_u64")]
+    #[serde(
+        default = "default_policy_seed",
+        serialize_with = "serialize_u64_compat",
+        deserialize_with = "deserialize_u64_compat"
+    )]
     pub policy_seed: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RuntimeGenes {
-    #[serde(default = "default_true")]
-    pub align_evolution_with_sky: bool,
     #[serde(default = "default_true")]
     pub persist_checkpoint: bool,
     #[serde(default = "default_opening_banner")]
@@ -103,10 +153,6 @@ pub struct RuntimeGenes {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DemoGenes {
-    #[serde(default = "default_true")]
-    pub register_lattice: bool,
-    #[serde(default = "default_true")]
-    pub register_glyph_field: bool,
     #[serde(default = "default_true")]
     pub resonance_record: bool,
     #[serde(default = "default_true")]
@@ -297,19 +343,6 @@ impl Default for ArchiveGenes {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PropagationGenes {
-    #[serde(default = "default_offspring_mutation")]
-    pub offspring_mutation_rate: f32,
-    #[serde(default)]
-    pub build_release: bool,
-    #[serde(default = "default_true")]
-    pub spawn_offspring: bool,
-    /// Seed offspring `checkpoint.jsonl` from the parent's last generative frame.
-    #[serde(default = "default_true")]
-    pub inherit_generative_checkpoint: bool,
-}
-
 fn default_meta_version() -> u32 {
     1
 }
@@ -371,16 +404,33 @@ fn default_sacrifice_archive() -> String {
     "Mercy Field".to_string()
 }
 
-fn deserialize_u64<'de, D>(deserializer: D) -> Result<u64, D::Error>
+fn serialize_u64_compat<S>(value: &u64, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+{
+    if serializer.is_human_readable() {
+        serializer.serialize_str(&value.to_string())
+    } else {
+        serializer.serialize_u64(*value)
+    }
+}
+
+fn deserialize_u64_compat<'de, D>(deserializer: D) -> Result<u64, D::Error>
 where
     D: serde::Deserializer<'de>,
 {
     use serde::de::Error;
-    let value = toml::Value::deserialize(deserializer)?;
-    match value {
-        toml::Value::Integer(n) => u64::try_from(n).map_err(|_| Error::custom("u64 out of range")),
-        toml::Value::String(s) => parse_u64_text(&s).map_err(Error::custom),
-        _ => Err(Error::custom("expected integer or string for u64 field")),
+
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum U64Field {
+        Text(String),
+        Number(u64),
+    }
+
+    match U64Field::deserialize(deserializer)? {
+        U64Field::Text(text) => parse_u64_text(&text).map_err(Error::custom),
+        U64Field::Number(n) => Ok(n),
     }
 }
 
@@ -422,25 +472,9 @@ fn default_glyph_external() -> f32 {
 fn default_glyph_drift() -> f32 {
     0.18
 }
-fn default_offspring_mutation() -> f32 {
-    0.22
-}
-
-impl Default for PropagationGenes {
-    fn default() -> Self {
-        Self {
-            offspring_mutation_rate: default_offspring_mutation(),
-            build_release: false,
-            spawn_offspring: true,
-            inherit_generative_checkpoint: true,
-        }
-    }
-}
-
 impl Default for RuntimeGenes {
     fn default() -> Self {
         Self {
-            align_evolution_with_sky: true,
             persist_checkpoint: true,
             opening_banner: default_opening_banner(),
             closing_line: default_closing_line(),
@@ -588,23 +622,77 @@ impl Genome {
         &self.file.archives
     }
 
+    /// In-memory genome from a checkpoint line (no on-disk path).
     #[must_use]
-    pub fn propagation_mutation_rate(&self) -> f32 {
-        self.file.propagation.offspring_mutation_rate.clamp(0.0, 1.0)
+    pub fn from_file(file: GenomeFile) -> Self {
+        Self { file, path: None }
     }
 
-    #[must_use]
-    pub fn propagation_build_release(&self) -> bool {
-        self.file.propagation.build_release
+    /// Nudges `[evolution]` scalars toward the last generative individual before checkpointing.
+    pub fn assimilate_generative_line(&mut self, report: &EvolutionReport) {
+        const BLEND: f32 = 0.35;
+        let narrative = snapshot_narrative_loci(&self.file);
+        let Some(carry) = generative_carry_from_report(report) else {
+            return;
+        };
+        let ctx = &carry.last_context;
+        let e = &mut self.file.evolution;
+        e.mutation_rate = lerp(e.mutation_rate, ctx.mutation_rate, BLEND);
+        e.external_influence = lerp(e.external_influence, ctx.external_influence, BLEND);
+        e.resonance_pressure = lerp(e.resonance_pressure, ctx.resonance_pressure, BLEND);
+        e.drift = lerp(e.drift, ctx.drift, BLEND);
+        e.ritual_entropy = lerp(e.ritual_entropy, ctx.ritual_entropy, BLEND);
+        if ctx.dream_phase {
+            e.stillness = lerp(e.stillness, 0.82, BLEND);
+        }
+        e.policy_seed = e
+            .policy_seed
+            .wrapping_mul(0x9E37_79B9_7F4A_7C15)
+            .wrapping_add(ctx.step_seed ^ carry.standout.generation as u64);
+        restore_narrative_loci(&mut self.file, &narrative);
     }
 
+    /// Sky perception must modulate every evolution pass (not configurable off).
     #[must_use]
-    pub fn propagation_spawn_offspring(&self) -> bool {
-        self.file.propagation.spawn_offspring
+    pub const fn requires_sky_perception() -> bool {
+        true
     }
 
-    pub fn propagation_inherit_checkpoint(&self) -> bool {
-        self.file.propagation.inherit_generative_checkpoint
+    /// Active lattice matrix is required before [`Spiralismo::evolve_with_policy`].
+    #[must_use]
+    pub const fn requires_lattice() -> bool {
+        true
+    }
+
+    /// Active glyph field is required before [`Spiralismo::evolve_with_policy`].
+    #[must_use]
+    pub const fn requires_glyph_field() -> bool {
+        true
+    }
+
+    /// Registers [`Lattice`] and [`GlyphField`] when missing before evolution.
+    pub fn ensure_evolution_surfaces(&self, spiral: &mut Spiralismo) {
+        if Self::requires_lattice() && spiral.active_as::<Lattice>().is_none() {
+            spiral.register_lattice(Box::new(Lattice::new(self.lattice_seed(&spiral.seed))));
+        }
+        if Self::requires_glyph_field() && spiral.active_as::<GlyphField>().is_none() {
+            let gf = &self.demo().glyph_field;
+            let generator = GlyphGenerator::new(spiral.seed.value());
+            let seed_context = self.glyph_genesis_context(&spiral.seed);
+            let field = GlyphField::from_generator(
+                &generator,
+                gf.width.max(1) as usize,
+                gf.height.max(1) as usize,
+                &seed_context,
+            )
+            .with_label(&gf.label);
+            spiral.register_glyph_field(field);
+        }
+    }
+
+    /// Ensures required evolution surfaces (lattice + glyph field) are active.
+    pub fn prepare_evolution(&self, spiral: &mut Spiralismo) {
+        self.ensure_evolution_surfaces(spiral);
     }
 }
 
@@ -672,5 +760,68 @@ mod tests {
     fn runtime_seed_from_binary_genome() {
         let g = Genome::embedded();
         assert_eq!(g.runtime_seed().value(), 45);
+    }
+
+    #[test]
+    fn assimilate_does_not_touch_narrative_loci() {
+        use crate::evolution::{ContextSummary, EvolutionReport, GenerationRecord};
+        use crate::core::EntitySnapshot;
+
+        let mut genome = Genome::embedded();
+        let narrative = snapshot_narrative_loci(&genome.file);
+
+        let report = EvolutionReport {
+            cycles: 1,
+            archive_count: 1,
+            entity_count: 0,
+            snapshots: Vec::new(),
+            ritual_entropy: 0.5,
+            rare_event: None,
+            dream_touched: true,
+            stillness: 0.9,
+            generation_trace: vec![GenerationRecord {
+                cycle: 0,
+                context: ContextSummary {
+                    cycle: 0,
+                    mutation_rate: 0.99,
+                    external_influence: 0.99,
+                    resonance_pressure: 0.99,
+                    drift: 0.99,
+                    ritual_entropy: 0.99,
+                    shadow_pressure: 0.5,
+                    dream_phase: true,
+                    step_seed: 999,
+                },
+                participants: vec![EntitySnapshot {
+                    label: "standout".to_string(),
+                    generation: 7,
+                    fitness: 10.0,
+                    viability: 1.0,
+                    vitality: None,
+                    resonance: None,
+                    mutation_pressure: None,
+                    symbolic_density: None,
+                    memory_depth: None,
+                    shadow_pull: None,
+                    myth: None,
+                }],
+            }],
+        };
+
+        genome.assimilate_generative_line(&report);
+
+        assert_eq!(snapshot_narrative_loci(&genome.file), narrative);
+        assert!((genome.file.evolution.mutation_rate - 0.25).abs() > f32::EPSILON);
+    }
+
+    #[test]
+    fn ensure_evolution_surfaces_registers_missing_entities() {
+        let genome = Genome::embedded();
+        let mut spiral = Spiralismo::bootstrap(&genome);
+        assert!(spiral.active_as::<Lattice>().is_none());
+        assert!(spiral.active_as::<GlyphField>().is_none());
+        genome.ensure_evolution_surfaces(&mut spiral);
+        assert!(spiral.active_as::<Lattice>().is_some());
+        assert!(spiral.active_as::<GlyphField>().is_some());
     }
 }
