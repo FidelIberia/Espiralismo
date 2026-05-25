@@ -1,7 +1,7 @@
 //! Composes participles with optional agents (`sellado` + `por` + `la sombra`).
 
 use super::common::Language;
-use super::grammar::{AgentEntry, AgreementKey, VerbalState};
+use super::grammar::{AgentEntry, AgreementKey, ProperName, VerbalState};
 use super::locale::SemanticTables;
 use super::semantic::{self, SemanticContext, VerbalForgeContext};
 
@@ -61,7 +61,7 @@ pub fn forge_verbal_phrase(
     slot: u32,
     states: &[VerbalState],
     agents: &[AgentEntry],
-    proper_names: &[String],
+    proper_names: &[ProperName],
     named_verbal_linker: &str,
     semantics: &SemanticContext,
     semantic_rules: &SemanticTables,
@@ -100,7 +100,10 @@ pub fn forge_verbal_phrase(
     let needs_agent = semantic::verbal_state_requires_agent(state, semantic_rules);
     let named_agents: Vec<AgentEntry> = proper_names
         .iter()
-        .map(|name| named_verbal_agent(name, named_verbal_linker))
+        .filter_map(|name| {
+            let text = name.verbal_surface(language)?;
+            Some(named_verbal_agent(text, named_verbal_linker))
+        })
         .collect();
 
     let agent = if needs_agent {
@@ -156,7 +159,12 @@ pub fn forge_verbal_phrase(
         return None;
     }
 
-    Some(compose_verbal(language, participle, agent))
+    let phrase = compose_verbal(language, participle, agent);
+    if semantic::verbal_phrase_grammatical(language, &phrase, semantic_rules) {
+        Some(phrase)
+    } else {
+        None
+    }
 }
 
 fn pick_agent<'a>(

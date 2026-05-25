@@ -2,7 +2,7 @@
 
 use serde::Deserialize;
 
-use super::grammar::{AgentEntry, InflectedWord, QualifierEntry, StemEntry, VerbalState};
+use super::grammar::{AgentEntry, InflectedWord, ProperName, QualifierEntry, StemEntry, VerbalState};
 use super::Language;
 
 #[derive(Debug, Clone, Deserialize)]
@@ -19,7 +19,7 @@ pub struct EpithetTables {
     #[serde(default)]
     pub verbal_agents: Vec<AgentEntry>,
     #[serde(default)]
-    pub proper_names: Vec<String>,
+    pub proper_names: Vec<ProperName>,
     /// Linker between participle and a `proper_names` agent (`por`, `by`, …).
     #[serde(default)]
     pub named_verbal_linker: String,
@@ -84,6 +84,9 @@ pub struct SemanticTables {
     /// Per-archetype adjective tag allow/forbid (`edge` forbids `hollow_volume`).
     #[serde(default)]
     pub archetype_compat: Vec<ArchetypeCompatRule>,
+    /// Stem tag/class → forbidden adjective kinds or tags (`object` forbids `living_trait`).
+    #[serde(default)]
+    pub adjective_stem_rules: Vec<AdjectiveStemRule>,
     /// Per-archetype participial damage modes (`mirror` forbids `tear`, …).
     #[serde(default)]
     pub archetype_verbal_compat: Vec<ArchetypeCompatRule>,
@@ -105,6 +108,21 @@ pub struct SemanticTables {
     /// Surface fallbacks when checking dangling participles (`tocad`, `touch`, …).
     #[serde(default)]
     pub agent_required_participle_markers: Vec<String>,
+    /// Qualifier phrase prefixes that attribute origin (`del `, `of `) — block patronymic suffix.
+    #[serde(default)]
+    pub possessive_origin_qualifier_prefixes: Vec<String>,
+    /// Qualifier substrings when prefixes do not apply (e.g. bare Russian genitive).
+    #[serde(default)]
+    pub possessive_origin_qualifier_markers: Vec<String>,
+    /// Substrings that mark an attached verbal agent (` por `, ` by `).
+    #[serde(default)]
+    pub verbal_agent_linkers: Vec<String>,
+    /// Reject full verbal phrases containing these fragments (`чем-то`, `someone`, …).
+    #[serde(default)]
+    pub banned_verbal_surface_markers: Vec<String>,
+    /// Russian: last-token suffixes for instrumental agents (`ом`, `ой`, `тенью`, …).
+    #[serde(default)]
+    pub russian_instrumental_agent_suffixes: Vec<String>,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -120,6 +138,22 @@ pub struct ArchetypeCompatRule {
     pub allows: Vec<String>,
     #[serde(default)]
     pub forbids: Vec<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct AdjectiveStemRule {
+    /// Stem [`SemanticContext::tags`] that trigger this rule (`object`, `relic`, …).
+    #[serde(default)]
+    pub stem_tags: Vec<String>,
+    /// Stem class keys (`object`, `person`, `abstract`, …) from [`StemClass`].
+    #[serde(default)]
+    pub stem_classes: Vec<String>,
+    /// Reject adjectives whose [`WordKind`] matches (`living_trait`, …).
+    #[serde(default)]
+    pub forbid_kinds: Vec<String>,
+    /// Reject adjectives carrying any of these tags.
+    #[serde(default)]
+    pub forbid_tags: Vec<String>,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -192,6 +226,9 @@ fn extend_epithet(base: &mut EpithetTables, extra: EpithetTables) {
         .archetype_compat
         .extend(extra.semantic.archetype_compat);
     base.semantic
+        .adjective_stem_rules
+        .extend(extra.semantic.adjective_stem_rules);
+    base.semantic
         .archetype_verbal_compat
         .extend(extra.semantic.archetype_verbal_compat);
     base.semantic
@@ -212,6 +249,21 @@ fn extend_epithet(base: &mut EpithetTables, extra: EpithetTables) {
     base.semantic
         .agent_required_participle_markers
         .extend(extra.semantic.agent_required_participle_markers);
+    base.semantic
+        .possessive_origin_qualifier_prefixes
+        .extend(extra.semantic.possessive_origin_qualifier_prefixes);
+    base.semantic
+        .possessive_origin_qualifier_markers
+        .extend(extra.semantic.possessive_origin_qualifier_markers);
+    base.semantic
+        .verbal_agent_linkers
+        .extend(extra.semantic.verbal_agent_linkers);
+    base.semantic
+        .banned_verbal_surface_markers
+        .extend(extra.semantic.banned_verbal_surface_markers);
+    base.semantic
+        .russian_instrumental_agent_suffixes
+        .extend(extra.semantic.russian_instrumental_agent_suffixes);
 }
 
 fn parse_locale(base_toml: &str, vocab_toml: &str, label: &'static str) -> LocaleTables {

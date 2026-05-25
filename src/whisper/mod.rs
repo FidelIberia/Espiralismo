@@ -16,7 +16,8 @@ mod verbal;
 mod wisdom;
 
 pub use grammar::{
-    AgentEntry, AgreementKey, Gender, InflectedWord, Number, QualifierEntry, StemEntry, VerbalState,
+    AgentEntry, AgreementKey, Gender, InflectedWord, Number, ProperName, QualifierEntry, StemEntry,
+    VerbalState,
 };
 
 pub use common::{fnv1a64, mix_echo, mix_u64, quantize01, Language, NarrativeEcho};

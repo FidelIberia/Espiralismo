@@ -28,7 +28,7 @@ struct Assembled<'a> {
     stem: &'a str,
     qualifier: Option<&'a str>,
     patron: Option<&'a str>,
-    title: Option<&'a str>,
+    title: Option<String>,
     /// Comma or glued opening (not used when [`post_nominal_verbal`] is set).
     prologue: Option<String>,
     prologue_is_verbal: bool,
@@ -148,6 +148,7 @@ pub fn forge(entity: &EntitySnapshot, generation: u32, language: Language) -> St
         seed,
         tables,
         key,
+        stem,
         &semantics,
         &tables.semantic,
         &verbal_forge,
@@ -164,10 +165,11 @@ pub fn forge(entity: &EntitySnapshot, generation: u32, language: Language) -> St
         }
         _ => None,
     };
-    let (mut epilogue_modifiers, epilogue_curse) = pick_epilogue(
+    let (mut epilogue_modifiers, mut epilogue_curse) = pick_epilogue(
         seed,
         tables,
         key,
+        stem,
         &semantics,
         &tables.semantic,
         shadow,
@@ -197,17 +199,22 @@ pub fn forge(entity: &EntitySnapshot, generation: u32, language: Language) -> St
             )
     });
 
-    let patron = pick_patron(seed, tables, memory, resonance, symbolic)
-        .filter(|_| semantic::stem_allows_patron(stem_entry))
-        .filter(|_| {
-            !semantic::patron_blocked_by_verbal_attribution(
-                language,
-                prologue.as_deref(),
-                prologue_is_verbal,
-                post_nominal_verbal.as_deref(),
-                &tables.semantic,
-            )
-        });
+    let mut patron = pick_patron(seed, tables, language, memory, resonance, symbolic)
+        .filter(|_| semantic::stem_allows_patron(stem_entry));
+
+    let mut post_nominal_verbal = post_nominal_verbal;
+    refine_assembled_grammar(
+        language,
+        stem,
+        &tables.semantic,
+        qualifier,
+        &mut patron,
+        prologue.as_deref(),
+        prologue_is_verbal,
+        &mut post_nominal_verbal,
+        &mut epilogue_modifiers,
+        &mut epilogue_curse,
+    );
 
     if semantic::output_needs_descriptor(
         qualifier,
@@ -222,6 +229,7 @@ pub fn forge(entity: &EntitySnapshot, generation: u32, language: Language) -> St
             seed,
             tables,
             key,
+            stem,
             &semantics,
             &tables.semantic,
             &mut epilogue_modifiers,
@@ -243,6 +251,45 @@ pub fn forge(entity: &EntitySnapshot, generation: u32, language: Language) -> St
 
     let _order = (roll_permille(seed, SLOT_ORDER) as usize) % 6;
     assemble(language, &assembled)
+}
+
+/// Drops slots that fail grammar rules (second pass after rolling).
+fn refine_assembled_grammar(
+    language: Language,
+    stem: &str,
+    semantic: &super::locale::SemanticTables,
+    qualifier: Option<&str>,
+    patron: &mut Option<&str>,
+    prologue: Option<&str>,
+    prologue_is_verbal: bool,
+    post_nominal_verbal: &mut Option<String>,
+    epilogue_modifiers: &mut Vec<String>,
+    epilogue_curse: &mut Option<String>,
+) {
+    epilogue_modifiers.retain(|m| !semantic::surface_redundant_with_stem(stem, m));
+    if epilogue_curse
+        .as_ref()
+        .is_some_and(|c| semantic::surface_redundant_with_stem(stem, c))
+    {
+        *epilogue_curse = None;
+    }
+    if let Some(ref verbal) = *post_nominal_verbal {
+        if !semantic::verbal_phrase_grammatical(language, verbal, semantic) {
+            *post_nominal_verbal = None;
+        }
+    }
+    if patron.is_some()
+        && !semantic::patron_grammatically_allowed(
+            language,
+            qualifier,
+            prologue,
+            prologue_is_verbal,
+            post_nominal_verbal.as_deref(),
+            semantic,
+        )
+    {
+        *patron = None;
+    }
 }
 
 fn pick_stem<'a>(
@@ -326,11 +373,18 @@ fn pick_qualifier<'a>(
 fn pick_patron<'a>(
     seed: u64,
     tables: &'a super::locale::EpithetTables,
+    language: Language,
     memory: f32,
     resonance: f32,
     symbolic: f32,
 ) -> Option<&'a str> {
-    if tables.proper_names.is_empty() {
+    let pool: Vec<usize> = tables
+        .proper_names
+        .iter()
+        .enumerate()
+        .filter_map(|(i, n)| n.patron_surface(language).map(|_| i))
+        .collect();
+    if pool.is_empty() {
         return None;
     }
     if memory < 0.36 && resonance < 0.40 && symbolic < 0.32 {
@@ -340,8 +394,8 @@ fn pick_patron<'a>(
     if roll_permille(seed, SLOT_PATRON) >= chance {
         return None;
     }
-    let pi = weighted_index(seed, SLOT_PATRON, tables.proper_names.len(), (memory * 200.0) as u64);
-    Some(tables.proper_names[pi].as_str())
+    let pi = weighted_index(seed, SLOT_PATRON, pool.len(), (memory * 200.0) as u64);
+    tables.proper_names[pool[pi]].patron_surface(language)
 }
 
 /// Opening state: at most one verbal phrase, otherwise an optional lead adjective.
@@ -349,6 +403,7 @@ fn pick_prologue(
     seed: u64,
     tables: &super::locale::EpithetTables,
     key: AgreementKey,
+    stem: &str,
     semantics: &SemanticContext,
     semantic_rules: &super::locale::SemanticTables,
     verbal_forge: &VerbalForgeContext,
@@ -402,6 +457,7 @@ fn pick_prologue(
         SLOT_PROLOGUE,
         tables,
         key,
+        stem,
         semantics,
         semantic_rules,
         PickSlot::PrologueAdj,
@@ -418,6 +474,7 @@ fn pick_epilogue(
     seed: u64,
     tables: &super::locale::EpithetTables,
     key: AgreementKey,
+    stem: &str,
     semantics: &SemanticContext,
     semantic_rules: &super::locale::SemanticTables,
     shadow: f32,
@@ -447,6 +504,7 @@ fn pick_epilogue(
             slot,
             tables,
             key,
+            stem,
             semantics,
             semantic_rules,
             PickSlot::Modifier,
@@ -459,7 +517,7 @@ fn pick_epilogue(
             }
         }
     }
-    let curse = pick_static_curse(seed, tables, key, semantics, semantic_rules, shadow, mutation);
+    let curse = pick_static_curse(seed, tables, key, stem, semantics, semantic_rules, shadow, mutation);
     (modifiers, curse)
 }
 
@@ -469,6 +527,7 @@ fn force_epilogue_modifier(
     seed: u64,
     tables: &super::locale::EpithetTables,
     key: AgreementKey,
+    stem: &str,
     semantics: &SemanticContext,
     semantic_rules: &super::locale::SemanticTables,
     modifiers: &mut Vec<String>,
@@ -478,6 +537,7 @@ fn force_epilogue_modifier(
         SLOT_FORCE_MODIFIER,
         tables,
         key,
+        stem,
         semantics,
         semantic_rules,
         PickSlot::Modifier,
@@ -496,6 +556,7 @@ fn pick_trait_adjective_entry(
     slot: u32,
     tables: &super::locale::EpithetTables,
     key: AgreementKey,
+    stem: &str,
     semantics: &SemanticContext,
     semantic_rules: &super::locale::SemanticTables,
     pick_slot: PickSlot,
@@ -507,19 +568,21 @@ fn pick_trait_adjective_entry(
         slot,
         &tables.adjectives,
         key,
+        Some(stem),
         semantics,
         semantic_rules,
         pick_slot,
         mod_state,
         salt,
     )?;
-    Some((surface.to_string(), tables.adjectives[idx].clone()))
+    Some((surface, tables.adjectives[idx].clone()))
 }
 
 fn pick_static_curse(
     seed: u64,
     tables: &super::locale::EpithetTables,
     key: AgreementKey,
+    stem: &str,
     semantics: &SemanticContext,
     semantic_rules: &super::locale::SemanticTables,
     shadow: f32,
@@ -537,13 +600,13 @@ fn pick_static_curse(
         SLOT_CURSE,
         &tables.curses,
         key,
+        Some(stem),
         semantics,
         semantic_rules,
         PickSlot::Curse,
         None,
         0,
     )
-    .map(str::to_string)
 }
 
 fn pick_inflected<'a>(
@@ -560,7 +623,7 @@ fn pick_inflected<'a>(
     shadow_floor: f32,
     mutation_floor: f32,
     max_permille: u32,
-) -> Option<&'a str> {
+) -> Option<String> {
     if pool.is_empty() || (shadow < shadow_floor && mutation < mutation_floor) {
         return None;
     }
@@ -573,6 +636,7 @@ fn pick_inflected<'a>(
         slot,
         pool,
         key,
+        None,
         semantics,
         semantic_rules,
         pick_slot,
@@ -581,22 +645,24 @@ fn pick_inflected<'a>(
     )
 }
 
-fn pick_matching_word<'a>(
+fn pick_matching_word(
     seed: u64,
     slot: u32,
-    pool: &'a [InflectedWord],
+    pool: &[InflectedWord],
     key: AgreementKey,
+    stem: Option<&str>,
     semantics: &SemanticContext,
     semantic_rules: &super::locale::SemanticTables,
     pick_slot: PickSlot,
     mod_state: Option<&ModifierState>,
     salt: usize,
-) -> Option<&'a str> {
+) -> Option<String> {
     pick_matching_word_entry(
         seed,
         slot,
         pool,
         key,
+        stem,
         semantics,
         semantic_rules,
         pick_slot,
@@ -606,34 +672,38 @@ fn pick_matching_word<'a>(
     .map(|(_, surface)| surface)
 }
 
-fn pick_matching_word_entry<'a>(
+fn pick_matching_word_entry(
     seed: u64,
     slot: u32,
-    pool: &'a [InflectedWord],
+    pool: &[InflectedWord],
     key: AgreementKey,
+    stem: Option<&str>,
     semantics: &SemanticContext,
     semantic_rules: &super::locale::SemanticTables,
     pick_slot: PickSlot,
     mod_state: Option<&ModifierState>,
     salt: usize,
-) -> Option<(usize, &'a str)> {
-    let mut candidates: Vec<(usize, &str)> = Vec::new();
+) -> Option<(usize, String)> {
+    let mut candidates: Vec<(usize, String)> = Vec::new();
     let mut weights: Vec<u64> = Vec::new();
     for (i, w) in pool.iter().enumerate() {
-        let Some(surface) = w.resolve_agreeing(key) else {
+        let Some(surface) = w.resolve_agreeing_owned(key) else {
             continue;
         };
+        if stem.is_some_and(|s| semantic::surface_redundant_with_stem(s, &surface)) {
+            continue;
+        }
         if !semantic::allows_word(w, semantics, pick_slot, mod_state, semantic_rules) {
             continue;
         }
-        if mod_state.is_some_and(|s| semantic::surface_already_used(surface, s)) {
+        if mod_state.is_some_and(|s| semantic::surface_already_used(&surface, s)) {
             continue;
         }
-        candidates.push((i, surface));
         weights.push(
-            semantic::text_coherence_weight(semantics, surface, semantic_rules)
+            semantic::text_coherence_weight(semantics, &surface, semantic_rules)
                 .saturating_add(semantic::archetype_profile_weight(w, semantics, semantic_rules)),
         );
+        candidates.push((i, surface));
     }
     if candidates.is_empty() {
         return None;
@@ -643,8 +713,7 @@ fn pick_matching_word_entry<'a>(
         (salt as u64).wrapping_add((key.gender as u64).rotate_left(3)),
     );
     let idx = semantic::weighted_pick(pick_seed, slot, &weights);
-    let (pool_idx, surface) = candidates[idx];
-    Some((pool_idx, surface))
+    Some(candidates[idx].clone())
 }
 
 fn roll_permille(seed: u64, slot: u32) -> u32 {
@@ -671,7 +740,11 @@ fn weighted_index(seed: u64, slot: u32, len: usize, bias: u64) -> usize {
 fn assemble(language: Language, p: &Assembled<'_>) -> String {
     let patron = p.patron.map(|n| patron_suffix(language, n));
     let core = build_name_phrase(language, p, &patron);
-    append_curse_suffix(assemble_with_prologue(language, p, core), p.epilogue_curse.as_deref())
+    append_curse_suffix(
+        language,
+        assemble_with_prologue(language, p, core),
+        p.epilogue_curse.as_deref(),
+    )
 }
 
 fn patron_suffix(language: Language, name: &str) -> String {
@@ -722,7 +795,7 @@ fn build_name_phrase_english(p: &Assembled<'_>, patron: &Option<String>) -> Stri
     if let Some(ref pat) = patron {
         phrase.push_str(pat);
     }
-    if let Some(t) = p.title {
+    if let Some(ref t) = p.title {
         phrase = format!(
             "{phrase} {}",
             title_for_name_phrase(Language::English, p.head_key, t)
@@ -732,18 +805,20 @@ fn build_name_phrase_english(p: &Assembled<'_>, patron: &Option<String>) -> Stri
     phrase
 }
 
-/// Russian: head noun, modifiers, genitive qualifier, post-nominal verbal, patron, title.
+/// Russian: pre-nominal modifiers, head noun, genitive qualifier, post-nominal verbal, patron, title.
 fn build_name_phrase_russian(p: &Assembled<'_>, patron: &Option<String>) -> String {
-    let mut phrase = p.stem.to_string();
+    let mut parts: Vec<&str> = Vec::with_capacity(p.epilogue_modifiers.len() + 1);
     for modifier in &p.epilogue_modifiers {
-        phrase.push(' ');
-        phrase.push_str(modifier);
+        parts.push(modifier.as_str());
     }
+    parts.push(p.stem);
+    let mut phrase = parts.join(" ");
     if let Some(q) = p.qualifier {
         phrase = format!("{phrase} {q}");
     }
-    append_post_nominal_verbal(&mut phrase, p.post_nominal_verbal.as_deref());
     append_patron_and_title(Language::Russian, p, &mut phrase, patron);
+    phrase = super::surface::russian_sentence_case_phrase(&phrase);
+    append_post_nominal_verbal(&mut phrase, p.post_nominal_verbal.as_deref());
     phrase
 }
 
@@ -763,7 +838,7 @@ fn append_patron_and_title(
     if let Some(ref pat) = patron {
         phrase.push_str(pat);
     }
-    if let Some(t) = p.title {
+    if let Some(ref t) = p.title {
         *phrase = format!(
             "{phrase} {}",
             title_for_name_phrase(language, p.head_key, t)
@@ -778,11 +853,11 @@ fn assemble_with_prologue(language: Language, p: &Assembled<'_>, name_phrase: St
         return formatted_name;
     };
     if p.prologue_is_verbal {
-        format!(
-            "{}, {}",
-            capitalize_first(prologue),
-            formatted_name
-        )
+        let name = match language {
+            Language::Russian => formatted_name.to_lowercase(),
+            _ => formatted_name,
+        };
+        format!("{}, {}", capitalize_first(prologue), name)
     } else {
         format_glued_prologue(language, prologue, &name_phrase)
     }
@@ -791,14 +866,20 @@ fn assemble_with_prologue(language: Language, p: &Assembled<'_>, name_phrase: St
 /// Name phrase caps after [`build_name_phrase`] (English already sentence-cased in the builder).
 fn format_name_for_display(language: Language, name_phrase: &str) -> String {
     match language {
-        Language::English => name_phrase.to_string(),
+        Language::English | Language::Russian => name_phrase.to_string(),
         _ => format_name_phrase_caps(language, name_phrase),
     }
 }
 
-fn append_curse_suffix(name_part: String, curse: Option<&str>) -> String {
+fn append_curse_suffix(language: Language, name_part: String, curse: Option<&str>) -> String {
     match curse {
-        Some(c) => format!("{name_part}, {c}"),
+        Some(c) => {
+            let curse_surf = match language {
+                Language::Russian => c.to_lowercase(),
+                _ => c.to_string(),
+            };
+            format!("{name_part}, {curse_surf}")
+        }
         None => name_part,
     }
 }
@@ -915,6 +996,46 @@ mod assemble_tests {
     }
 
     #[test]
+    fn russian_prenominal_modifiers_and_instrumental_verbal() {
+        let p = Assembled {
+            stem: "Ключи склепа",
+            qualifier: None,
+            patron: None,
+            title: None,
+            prologue: None,
+            prologue_is_verbal: false,
+            post_nominal_verbal: Some("сожжённые Анубисом".to_string()),
+            epilogue_modifiers: vec!["кровавые".to_string()],
+            epilogue_curse: None,
+            head_key: AgreementKey::from_tags("m", "p"),
+        };
+        assert_eq!(
+            assemble(Language::Russian, &p),
+            "Кровавые ключи склепа сожжённые Анубисом"
+        );
+    }
+
+    #[test]
+    fn spanish_genitive_qualifier_with_torn_verbal_uses_por_not_patron() {
+        let p = Assembled {
+            stem: "Orbes fracturados",
+            qualifier: Some("del reinado caído"),
+            patron: None,
+            title: None,
+            prologue: None,
+            prologue_is_verbal: false,
+            post_nominal_verbal: Some("desgarrados por Modi".to_string()),
+            epilogue_modifiers: vec![],
+            epilogue_curse: None,
+            head_key: AgreementKey::from_tags("m", "p"),
+        };
+        assert_eq!(
+            assemble(Language::Spanish, &p),
+            "Orbes fracturados del reinado caído desgarrados por Modi"
+        );
+    }
+
+    #[test]
     fn spanish_lead_adjective_is_post_nominal() {
         let p = Assembled {
             stem: "Tronos vacíos",
@@ -994,7 +1115,7 @@ mod assemble_tests {
             stem: "Corona rota",
             qualifier: None,
             patron: None,
-            title: Some("la sin nombre"),
+            title: Some("la sin nombre".to_string()),
             prologue: Some("devorada por los dioses".to_string()),
             prologue_is_verbal: true,
             post_nominal_verbal: None,
@@ -1068,7 +1189,7 @@ mod assemble_tests {
             stem: "Broken Crown",
             qualifier: None,
             patron: None,
-            title: Some("the Nameless"),
+            title: Some("the Nameless".to_string()),
             prologue: Some("devoured by the gods".to_string()),
             prologue_is_verbal: true,
             post_nominal_verbal: None,
@@ -1096,7 +1217,7 @@ mod assemble_tests {
             epilogue_curse: None,
             head_key: AgreementKey::from_tags("f", "p"),
         };
-        assert_eq!(assemble(Language::Russian, &p), "Сферы молчаливые");
+        assert_eq!(assemble(Language::Russian, &p), "Молчаливые сферы");
     }
 
     #[test]
@@ -1113,7 +1234,7 @@ mod assemble_tests {
             epilogue_curse: None,
             head_key: AgreementKey::from_tags("m", "s"),
         };
-        assert_eq!(assemble(Language::Russian, &p), "Молот древний");
+        assert_eq!(assemble(Language::Russian, &p), "Древний молот");
     }
 
     #[test]
@@ -1122,7 +1243,7 @@ mod assemble_tests {
             stem: "Реликвия",
             qualifier: Some("бездны"),
             patron: None,
-            title: Some("безымянная"),
+            title: Some("безымянная".to_string()),
             prologue: Some("запечатанная тенью".to_string()),
             prologue_is_verbal: true,
             post_nominal_verbal: None,
@@ -1132,7 +1253,7 @@ mod assemble_tests {
         };
         assert_eq!(
             assemble(Language::Russian, &p),
-            "Запечатанная тенью, Реликвия бездны безымянная, проклятая"
+            "Запечатанная тенью, реликвия бездны безымянная, проклятая"
         );
     }
 }

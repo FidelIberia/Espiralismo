@@ -3,7 +3,8 @@
 use super::common::Language;
 use super::grammar::{AgreementKey, Gender, Number};
 
-/// Whether a phrase includes an external agent (`por la sombra`, `by the gods`, instrumental RU).
+/// Whether a phrase includes an external agent (legacy; production uses [`semantic::phrase_has_verbal_agent`]).
+#[allow(dead_code)]
 #[must_use]
 pub fn phrase_has_verbal_agent(language: Language, phrase: &str) -> bool {
     segment_is_verbal(language, phrase)
@@ -19,6 +20,13 @@ pub fn segment_is_verbal(language: Language, segment: &str) -> bool {
     }
 }
 
+/// Russian participle phrase includes an agent (`запечатанная тенью`, `раздавленные титаном`).
+#[must_use]
+pub fn russian_participle_has_agent_phrase(phrase: &str) -> bool {
+    let words: Vec<&str> = phrase.split_whitespace().collect();
+    words.len() >= 2 && russian_looks_like_participle(words[0])
+}
+
 /// Russian: participle + instrumental agent (`запечатанная тенью`, `призванный кем-то`).
 fn russian_segment_is_verbal(segment: &str) -> bool {
     if segment.contains(" кем-то") || segment.contains(" чем-то") {
@@ -31,7 +39,8 @@ fn russian_segment_is_verbal(segment: &str) -> bool {
     russian_looks_like_participle(words[0]) && russian_instrumental_agent(words.last().unwrap_or(&""))
 }
 
-fn russian_looks_like_participle(word: &str) -> bool {
+#[must_use]
+pub fn russian_looks_like_participle(word: &str) -> bool {
     word.ends_with("нный")
         || word.ends_with("нная")
         || word.ends_with("нные")
@@ -77,10 +86,10 @@ fn russian_instrumental_agent(word: &str) -> bool {
         || word.ends_with("мёртвыми")
 }
 
-/// English stacks adjectives before the noun; Spanish and Russian use post-nominal order.
+/// English and Russian stack adjectives before the noun; Spanish uses post-nominal order.
 #[must_use]
 pub fn adjectives_precede_noun(language: Language) -> bool {
-    matches!(language, Language::English)
+    matches!(language, Language::English | Language::Russian)
 }
 
 /// Default caps on the name phrase after a verbal prologue.
@@ -88,7 +97,8 @@ pub fn adjectives_precede_noun(language: Language) -> bool {
 pub fn format_name_phrase_caps(language: Language, phrase: &str) -> String {
     match language {
         Language::English => sentence_case_phrase(phrase),
-        Language::Spanish | Language::Russian => capitalize_first(phrase),
+        Language::Spanish => capitalize_first(phrase),
+        Language::Russian => russian_sentence_case_phrase(phrase),
     }
 }
 
@@ -97,14 +107,45 @@ pub fn sentence_case_phrase(s: &str) -> String {
     capitalize_first(&s.to_lowercase())
 }
 
+/// Literary Russian: first word capitalized; following words lowercased.
+/// After a comma, later segments are fully lowercased (`Запечатанная тенью, реликвия …`).
+#[must_use]
+pub fn russian_sentence_case_phrase(s: &str) -> String {
+    if !s.contains(", ") {
+        return russian_sentence_case_segment(s);
+    }
+    let mut parts: Vec<String> = s.split(", ").map(str::to_string).collect();
+    if let Some(first) = parts.first_mut() {
+        *first = russian_sentence_case_segment(first);
+    }
+    for seg in parts.iter_mut().skip(1) {
+        *seg = seg.to_lowercase();
+    }
+    parts.join(", ")
+}
+
+fn russian_sentence_case_segment(s: &str) -> String {
+    let words: Vec<&str> = s.split_whitespace().collect();
+    if words.is_empty() {
+        return String::new();
+    }
+    let mut out = capitalize_first(words[0]);
+    for w in words.iter().skip(1) {
+        out.push(' ');
+        out.push_str(&w.to_lowercase());
+    }
+    out
+}
+
 /// Glued lead adjective + name (`Ancient Maul`, `Древний молот`).
 #[must_use]
 pub fn format_glued_prologue(language: Language, lead: &str, name_phrase: &str) -> String {
-    let glued = match language {
-        Language::English => format!("{lead} {name_phrase}"),
-        Language::Spanish | Language::Russian => format!("{lead} {name_phrase}"),
-    };
-    title_case_epithet(&glued)
+    let glued = format!("{lead} {name_phrase}");
+    match language {
+        Language::English => title_case_epithet(&glued),
+        Language::Spanish => title_case_epithet(&glued),
+        Language::Russian => russian_sentence_case_phrase(&glued),
+    }
 }
 
 #[must_use]
@@ -195,6 +236,18 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn russian_sentence_case_lowercases_after_first_word() {
+        assert_eq!(
+            russian_sentence_case_phrase("Кровавые Чёрные свечи"),
+            "Кровавые чёрные свечи"
+        );
+        assert_eq!(
+            russian_sentence_case_phrase("Запечатанная тенью, Реликвия бездны, проклятая"),
+            "Запечатанная тенью, реликвия бездны, проклятая"
+        );
     }
 
     #[test]

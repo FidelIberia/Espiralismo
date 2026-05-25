@@ -130,6 +130,14 @@ ms = "жадный"
 fs = "жадная"
 mp = "жадные"
 fp = "жадные"
+kind = "living_trait"
+
+[[epithet.adjectives]]
+ms = "алчный"
+fs = "алчная"
+mp = "алчные"
+fp = "алчные"
+kind = "living_trait"
 
 [[epithet.adjectives]]
 ms = "пылающий"
@@ -284,16 +292,57 @@ kind = "character_epithet"
 [epithet]
 named_verbal_linker = ""
 proper_names = [
-    "Азатот",
-    "Йог-Сотоф",
-    "Ньярлатотеп",
-    "Ктулху",
-    "Хастур",
-    "Шуб-Ниггурат",
-    "Дагон",
+    { name = "Азатот", patron = "Азатота", verbal = "Азатотом" },
+    { name = "Йог-Сотоф", patron = "Йога-Сотофа", verbal = "Йогом-Сотофом" },
+    { name = "Ньярлатотеп", patron = "Ньярлатотепа", verbal = "Ньярлатотепом" },
+    { name = "Ктулху", patron = "Ктулху", verbal = "Ктулху" },
+    { name = "Хастур", patron = "Хастура", verbal = "Хастуром" },
+    { name = "Шуб-Ниггурат", patron = "Шуб-Ниггурат", verbal = "Шуб-Ниггурат" },
+    { name = "Дагон", patron = "Дагона", verbal = "Дагоном" },
 ]
 
 [epithet.semantic]
+possessive_origin_qualifier_markers = [
+    "подземелья",
+    "вечной ночи",
+    "древней крови",
+    "павшего трона",
+    "бездны",
+    "отчаяния",
+    "пепла",
+    "безумия",
+    "пустоты",
+    "холодного железа",
+]
+banned_verbal_surface_markers = [
+    "чем-то",
+    "кем-то",
+    "кто-то",
+    "кое-кто",
+]
+russian_instrumental_agent_suffixes = [
+    "ой",
+    "ом",
+    "ём",
+    "ем",
+    "ами",
+    "ями",
+    "ою",
+    "ьмой",
+    "нею",
+    "тенью",
+    "бездной",
+    "тьмой",
+    "орками",
+    "богами",
+    "титаном",
+    "титанами",
+    "морем",
+    "бурей",
+    "змеёй",
+    "мёртвыми",
+    "судом",
+]
 verbal_agent_experience_markers = [
     "предан",
     "пробужд",
@@ -305,8 +354,15 @@ verbal_physical_markers = [
     "сожж",
     "утоплен",
     "погреб",
+    "закован",
+    "запечат",
+    "заколдован",
+    "призван",
+    "поглощ",
 ]
 living_trait_markers = [
+    "алчн",
+    "жадн",
     "безжалост",
     "жесток",
     "pitiless",
@@ -494,11 +550,21 @@ banned_agent_markers = [
     "primer nombre",
     "first name",
     "первое имя",
+    "чем-то",
+    "кем-то",
 ]
 
 [[epithet.semantic.tag_conflicts]]
 a = "fire_active"
 b = "fire_done"
+
+[[epithet.semantic.adjective_stem_rules]]
+stem_tags = ["object", "relic"]
+forbid_kinds = ["living_trait"]
+
+[[epithet.semantic.adjective_stem_rules]]
+stem_classes = ["object", "abstract"]
+forbid_kinds = ["living_trait"]
 
 [[epithet.semantic.archetype_compat]]
 archetype = "edge"
@@ -509,8 +575,28 @@ archetype = "mirror"
 forbids = ["organic", "wither", "living_trait"]
 
 [[epithet.semantic.archetype_compat]]
+archetype = "relic"
+forbids = ["living_trait", "organic", "wither"]
+
+[[epithet.semantic.archetype_compat]]
+archetype = "icon"
+forbids = ["living_trait", "organic"]
+
+[[epithet.semantic.archetype_compat]]
+archetype = "bell"
+forbids = ["living_trait", "organic"]
+
+[[epithet.semantic.archetype_compat]]
 archetype = "throne"
-forbids = ["organic", "wither"]
+forbids = ["organic", "wither", "living_trait"]
+
+[[epithet.semantic.archetype_compat]]
+archetype = "crown"
+forbids = ["organic", "wither", "living_trait"]
+
+[[epithet.semantic.archetype_compat]]
+archetype = "vessel"
+forbids = ["sharp", "edge", "living_trait"]
 
 [[epithet.semantic.archetype_compat]]
 archetype = "weapon"
@@ -522,6 +608,26 @@ forbids = ["tear", "drown", "flay"]
 
 [[epithet.semantic.archetype_verbal_compat]]
 archetype = "bell"
+forbids = ["tear", "drown"]
+
+[[epithet.semantic.archetype_verbal_compat]]
+archetype = "icon"
+forbids = ["tear", "drown"]
+
+[[epithet.semantic.archetype_verbal_compat]]
+archetype = "vessel"
+forbids = ["tear"]
+
+[[epithet.semantic.archetype_verbal_compat]]
+archetype = "crown"
+forbids = ["tear", "drown"]
+
+[[epithet.semantic.archetype_verbal_compat]]
+archetype = "throne"
+forbids = ["tear", "drown"]
+
+[[epithet.semantic.archetype_verbal_compat]]
+archetype = "relic"
 forbids = ["tear", "drown"]
 
 [[epithet.semantic.archetype_verbal_compat]]
@@ -539,6 +645,14 @@ forbids = ["drown", "flay"]
 [[epithet.semantic.themes]]
 key = "funeral"
 markers = ["свеч", "труп", "склеп", "надгроб", "урн", "гроб", "funer", "crypt"]
+
+[[epithet.semantic.themes]]
+key = "fallen_royal"
+markers = ["трон", "корон", "throne", "crown", "king", "queen", "павш", "fallen", "пуст"]
+
+[[epithet.semantic.themes]]
+key = "naming"
+markers = ["имен", "имя", "name", "named", "nombr", "nombre"]
 
 [[epithet.semantic.themes]]
 key = "serpent"

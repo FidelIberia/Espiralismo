@@ -6,7 +6,7 @@
 use std::collections::HashSet;
 
 use super::grammar::{AgentEntry, InflectedWord, StemEntry, VerbalState};
-use super::locale::{ArchetypeCompatRule, SemanticTables, VerbAgentRule};
+use super::locale::{AdjectiveStemRule, ArchetypeCompatRule, SemanticTables, VerbAgentRule};
 
 /// Broad class of the head noun phrase.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -55,7 +55,7 @@ pub struct ModifierState {
     pub count: usize,
 }
 
-pub const MAX_EPILOGUE_MODIFIERS: usize = 3;
+pub const MAX_EPILOGUE_MODIFIERS: usize = 2;
 
 /// How a participle relates to the head noun.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -106,6 +106,69 @@ impl SemanticContext {
     }
 }
 
+/// Whether a verbal phrase includes an explicit agent (linker or Russian instrumental).
+#[must_use]
+pub fn phrase_has_verbal_agent(
+    language: super::common::Language,
+    phrase: &str,
+    semantic: &SemanticTables,
+) -> bool {
+    if semantic
+        .verbal_agent_linkers
+        .iter()
+        .map(|l| normalize_tag(l))
+        .any(|l| !l.is_empty() && phrase.contains(l.as_str()))
+    {
+        return true;
+    }
+    language == super::common::Language::Russian
+        && russian_participle_has_instrumental_agent(phrase, semantic)
+}
+
+/// Participles that imply an agent must not appear without one in the surface phrase.
+#[must_use]
+pub fn verbal_phrase_grammatical(
+    language: super::common::Language,
+    phrase: &str,
+    semantic: &SemanticTables,
+) -> bool {
+    let lower = phrase.trim().to_lowercase();
+    if lower.is_empty() {
+        return false;
+    }
+    if surface_matches_any_marker(&lower, &semantic.banned_verbal_surface_markers)
+        || surface_matches_any_marker(&lower, &semantic.banned_indefinite_markers)
+        || surface_matches_any_marker(&lower, &semantic.banned_agent_markers)
+    {
+        return false;
+    }
+    if participle_requires_agent_surface(phrase, semantic) && !phrase_has_verbal_agent(language, phrase, semantic)
+    {
+        return false;
+    }
+    true
+}
+
+/// Patronymic suffix is incompatible with the current verbal / qualifier layout.
+#[must_use]
+pub fn patron_grammatically_allowed(
+    language: super::common::Language,
+    qualifier: Option<&str>,
+    prologue: Option<&str>,
+    prologue_is_verbal: bool,
+    post_nominal_verbal: Option<&str>,
+    semantic: &SemanticTables,
+) -> bool {
+    !patron_blocked_by_qualifier(qualifier, semantic)
+        && !patron_blocked_by_verbal_attribution(
+            language,
+            prologue,
+            prologue_is_verbal,
+            post_nominal_verbal,
+            semantic,
+        )
+}
+
 /// Verbal attribution (`por alguien`, `by the spiral`) and patronymic (`de Miguel`) do not combine.
 #[must_use]
 pub fn patron_blocked_by_verbal_attribution(
@@ -116,7 +179,7 @@ pub fn patron_blocked_by_verbal_attribution(
     semantic: &SemanticTables,
 ) -> bool {
     if let Some(p) = post_nominal_verbal {
-        if super::surface::phrase_has_verbal_agent(language, p) {
+        if phrase_has_verbal_agent(language, p, semantic) {
             return true;
         }
         if participle_requires_agent_surface(p, semantic) {
@@ -125,7 +188,7 @@ pub fn patron_blocked_by_verbal_attribution(
     }
     if prologue_is_verbal {
         if let Some(p) = prologue {
-            if super::surface::phrase_has_verbal_agent(language, p) {
+            if phrase_has_verbal_agent(language, p, semantic) {
                 return true;
             }
             if participle_requires_agent_surface(p, semantic) {
@@ -136,6 +199,23 @@ pub fn patron_blocked_by_verbal_attribution(
     false
 }
 
+fn russian_participle_has_instrumental_agent(phrase: &str, semantic: &SemanticTables) -> bool {
+    let words: Vec<&str> = phrase.split_whitespace().collect();
+    if words.len() < 2 || !super::surface::russian_looks_like_participle(words[0]) {
+        return false;
+    }
+    let agent = words.last().unwrap_or(&"");
+    let lower = agent.to_lowercase();
+    if semantic.russian_instrumental_agent_suffixes.is_empty() {
+        return super::surface::russian_participle_has_agent_phrase(phrase);
+    }
+    semantic
+        .russian_instrumental_agent_suffixes
+        .iter()
+        .map(|s| normalize_tag(s))
+        .any(|s| !s.is_empty() && lower.ends_with(s.as_str()))
+}
+
 /// Participles that only make sense with an agent (`tocada por X`, not `tocada de X`).
 #[must_use]
 pub fn verbal_state_requires_agent(state: &VerbalState, semantic: &SemanticTables) -> bool {
@@ -143,20 +223,51 @@ pub fn verbal_state_requires_agent(state: &VerbalState, semantic: &SemanticTable
         return true;
     }
     let modes = infer_verb_tags(state, semantic);
-    semantic
+    if semantic
         .agent_required_verb_tags
         .iter()
         .map(|t| normalize_tag(t))
         .any(|t| !t.is_empty() && modes.contains(&t))
+    {
+        return true;
+    }
+    infer_agent_experience_participle(state, semantic) || infer_physical_participle(state, semantic)
 }
 
 fn participle_requires_agent_surface(participle: &str, semantic: &SemanticTables) -> bool {
     let lower = participle.to_lowercase();
-    semantic
-        .agent_required_participle_markers
+    surface_matches_any_marker(
+        &lower,
+        &semantic.agent_required_participle_markers,
+    ) || surface_matches_any_marker(&lower, &semantic.verbal_physical_markers)
+        || surface_matches_any_marker(&lower, &semantic.verbal_agent_experience_markers)
+}
+
+fn surface_matches_any_marker(lower: &str, markers: &[String]) -> bool {
+    markers.iter().map(|m| normalize_tag(m)).any(|m| {
+        !m.is_empty() && lower.contains(m.as_str())
+    })
+}
+
+/// Qualifiers that attribute origin (`del reinado`, `of the throne`) clash with patronymic `de X`.
+#[must_use]
+pub fn qualifier_is_possessive_origin(qualifier: &str, semantic: &SemanticTables) -> bool {
+    let q = qualifier.trim().to_ascii_lowercase();
+    if semantic
+        .possessive_origin_qualifier_prefixes
         .iter()
-        .map(|m| normalize_tag(m))
-        .any(|m| !m.is_empty() && lower.contains(m.as_str()))
+        .map(|p| normalize_tag(p))
+        .any(|p| !p.is_empty() && q.starts_with(p.as_str()))
+    {
+        return true;
+    }
+    surface_matches_any_marker(&q, &semantic.possessive_origin_qualifier_markers)
+}
+
+/// Patronymic suffix (`de Modi`, `of Miguel`) must not follow a genitive qualifier.
+#[must_use]
+pub fn patron_blocked_by_qualifier(qualifier: Option<&str>, semantic: &SemanticTables) -> bool {
+    qualifier.is_some_and(|q| qualifier_is_possessive_origin(q, semantic))
 }
 
 /// Qualifier after a `por …` verbal reads as modifying the agent, not the relic (`… por X de Y`).
@@ -170,7 +281,7 @@ pub fn qualifier_conflicts_with_verbal_agent(
     let Some(verbal) = post_nominal_verbal else {
         return false;
     };
-    if !super::surface::phrase_has_verbal_agent(language, verbal) {
+    if !phrase_has_verbal_agent(language, verbal, semantic) {
         return false;
     }
     let agent_text = verbal_agent_segment(language, verbal);
@@ -413,9 +524,6 @@ fn is_banned_agent_text(agent: &AgentEntry, semantic: &SemanticTables) -> bool {
     {
         return true;
     }
-    if !agent.indefinite {
-        return false;
-    }
     semantic
         .banned_indefinite_markers
         .iter()
@@ -510,6 +618,9 @@ pub fn allows_word(
     if !archetype_allows_word(word, ctx, semantic_rules) {
         return false;
     }
+    if !adjective_stem_allowed(word, ctx, slot, semantic_rules) {
+        return false;
+    }
     true
 }
 
@@ -527,7 +638,7 @@ pub fn register_modifier(state: &mut ModifierState, word: &InflectedWord, surfac
 }
 
 fn normalize_surface(surface: &str) -> String {
-    surface.trim().to_ascii_lowercase()
+    surface.trim().to_lowercase()
 }
 
 #[must_use]
@@ -544,6 +655,22 @@ pub fn qualifier_redundant_with_stem(stem: &str, qualifier: &str) -> bool {
         return false;
     }
     stem_n.ends_with(&q_n) || stem_n.contains(&format!(" {q_n}"))
+}
+
+/// Modifier or curse already expressed on the head (`Проклятый замок` + `проклятый`).
+#[must_use]
+pub fn surface_redundant_with_stem(stem: &str, surface: &str) -> bool {
+    if qualifier_redundant_with_stem(stem, surface) {
+        return true;
+    }
+    let stem_n = normalize_surface(stem);
+    let surf_n = normalize_surface(surface);
+    if surf_n.is_empty() {
+        return false;
+    }
+    stem_n
+        .split_whitespace()
+        .any(|w| w == surf_n || w.starts_with(surf_n.as_str()))
 }
 
 fn classify_stem(stem: &StemEntry, semantic: &SemanticTables) -> StemClass {
@@ -697,6 +824,60 @@ fn tag_conflicts_with_set(
         }
     }
     false
+}
+
+fn adjective_stem_allowed(
+    word: &InflectedWord,
+    ctx: &SemanticContext,
+    slot: PickSlot,
+    semantic_rules: &SemanticTables,
+) -> bool {
+    if semantic_rules.adjective_stem_rules.is_empty() || slot == PickSlot::Title {
+        return true;
+    }
+    let kind = effective_kind(word, slot, semantic_rules);
+    let word_tags: HashSet<String> = word
+        .tags
+        .iter()
+        .map(|t| normalize_tag(t))
+        .filter(|t| !t.is_empty())
+        .collect();
+    let mut tags = word_tags;
+    if matches!(kind, WordKind::LivingTrait) {
+        tags.insert("living_trait".to_string());
+    }
+    for rule in &semantic_rules.adjective_stem_rules {
+        if !stem_matches_adjective_rule(ctx, rule) {
+            continue;
+        }
+        if rule
+            .forbid_kinds
+            .iter()
+            .map(|k| parse_word_kind(k))
+            .any(|k| k == kind)
+        {
+            return false;
+        }
+        if rule
+            .forbid_tags
+            .iter()
+            .map(|t| normalize_tag(t))
+            .any(|t| !t.is_empty() && tags.contains(&t))
+        {
+            return false;
+        }
+    }
+    true
+}
+
+fn stem_matches_adjective_rule(ctx: &SemanticContext, rule: &AdjectiveStemRule) -> bool {
+    if rule.stem_tags.iter().map(|t| normalize_tag(t)).any(|t| ctx.tags.contains(&t)) {
+        return true;
+    }
+    rule.stem_classes
+        .iter()
+        .map(|c| normalize_tag(c))
+        .any(|c| tag_matches_class(&c, ctx.class) || ctx.tags.contains(&c))
 }
 
 fn archetype_allows_word(
@@ -957,7 +1138,11 @@ fn verbal_probe(state: &VerbalState) -> String {
         .ms
         .as_deref()
         .or(state.fs.as_deref())
+        .or(state.mp.as_deref())
+        .or(state.fp.as_deref())
         .or(state.invariant.as_deref())
+        .or(state.ns.as_deref())
+        .or(state.np.as_deref())
         .unwrap_or("")
         .to_lowercase()
 }
@@ -970,7 +1155,7 @@ fn normalize_tag(s: &str) -> String {
 mod tests {
     use super::*;
     use super::super::grammar::{AgentEntry, AgreementKey, Gender, Number, VerbalState};
-    use super::super::locale::{SemanticMarkerSet, SemanticTagConflict};
+    use super::super::locale::{AdjectiveStemRule, SemanticMarkerSet, SemanticTagConflict};
 
     fn semantic_rules() -> SemanticTables {
         SemanticTables {
@@ -1106,6 +1291,15 @@ mod tests {
                 "quemad".to_string(),
                 "burn".to_string(),
                 "enterr".to_string(),
+                "desgarr".to_string(),
+            ],
+            verbal_agent_linkers: vec![" por ".to_string(), " by ".to_string()],
+            adjective_stem_rules: vec![
+                AdjectiveStemRule {
+                    stem_tags: vec!["object".to_string(), "relic".to_string()],
+                    forbid_kinds: vec!["living_trait".to_string()],
+                    ..AdjectiveStemRule::default()
+                },
             ],
             ..SemanticTables::default()
         }
@@ -1162,6 +1356,26 @@ mod tests {
             ..InflectedWord::default()
         };
         assert!(!allows_word(&loco, &ctx, PickSlot::Modifier, None, &rules));
+    }
+
+    #[test]
+    fn adjective_stem_rule_blocks_trait_on_relic_tag() {
+        let rules = semantic_rules();
+        let mut entry = stem("Реликвия", None, &[]);
+        entry.tags = vec!["relic".to_string(), "object".to_string()];
+        let ctx = SemanticContext::from_stem(&entry, &rules);
+        let greedy = InflectedWord {
+            ms: Some("алчный".to_string()),
+            kind: Some("living_trait".to_string()),
+            ..InflectedWord::default()
+        };
+        assert!(!allows_word(&greedy, &ctx, PickSlot::Modifier, None, &rules));
+        let keen = InflectedWord {
+            invariant: Some("sharp".to_string()),
+            tags: vec!["sharp".to_string()],
+            ..InflectedWord::default()
+        };
+        assert!(allows_word(&keen, &ctx, PickSlot::Modifier, None, &rules));
     }
 
     #[test]
@@ -1519,6 +1733,51 @@ mod tests {
     }
 
     #[test]
+    fn verbal_phrase_requires_explicit_agent() {
+        let mut rules = semantic_rules();
+        rules.verbal_physical_markers = vec!["desgarr".to_string()];
+        rules.verbal_agent_linkers = vec![" por ".to_string()];
+        assert!(!verbal_phrase_grammatical(
+            super::super::common::Language::Spanish,
+            "desgarrados",
+            &rules,
+        ));
+        assert!(verbal_phrase_grammatical(
+            super::super::common::Language::Spanish,
+            "desgarrados por Modi",
+            &rules,
+        ));
+        assert!(!verbal_phrase_grammatical(
+            super::super::common::Language::Spanish,
+            "desgarrados de Modi",
+            &rules,
+        ));
+    }
+
+    #[test]
+    fn russian_verbal_rejects_vague_and_genitive_only_agent() {
+        let mut rules = semantic_rules();
+        rules.verbal_physical_markers = vec!["закован".to_string()];
+        rules.banned_verbal_surface_markers = vec!["чем-то".to_string()];
+        rules.russian_instrumental_agent_suffixes = vec!["ом".to_string(), "ой".to_string()];
+        assert!(!verbal_phrase_grammatical(
+            super::super::common::Language::Russian,
+            "закованные чем-то",
+            &rules,
+        ));
+        assert!(!verbal_phrase_grammatical(
+            super::super::common::Language::Russian,
+            "закованные Кракена",
+            &rules,
+        ));
+        assert!(verbal_phrase_grammatical(
+            super::super::common::Language::Russian,
+            "закованные Кракеном",
+            &rules,
+        ));
+    }
+
+    #[test]
     fn patron_blocked_when_verbal_has_agent() {
         use super::super::common::Language;
         let rules = semantic_rules();
@@ -1536,6 +1795,13 @@ mod tests {
             Some("tocada"),
             &rules,
         ));
+        assert!(patron_blocked_by_verbal_attribution(
+            Language::Spanish,
+            None,
+            false,
+            Some("desgarrados"),
+            &rules,
+        ));
         assert!(!patron_blocked_by_verbal_attribution(
             Language::Spanish,
             None,
@@ -1543,6 +1809,64 @@ mod tests {
             Some("sellado"),
             &rules,
         ));
+    }
+
+    #[test]
+    fn patron_blocked_with_genitive_qualifier() {
+        let mut es = semantic_rules();
+        es.possessive_origin_qualifier_prefixes = vec![
+            "del ".into(),
+            "de la ".into(),
+            "de ".into(),
+        ];
+        assert!(patron_blocked_by_qualifier(
+            Some("del reinado caído"),
+            &es,
+        ));
+        let mut en = semantic_rules();
+        en.possessive_origin_qualifier_prefixes = vec!["of ".into()];
+        assert!(patron_blocked_by_qualifier(
+            Some("of the Fallen Throne"),
+            &en,
+        ));
+        let mut ru = semantic_rules();
+        ru.possessive_origin_qualifier_markers = vec!["павшего".into()];
+        assert!(patron_blocked_by_qualifier(
+            Some("павшего трона"),
+            &ru,
+        ));
+        assert!(!patron_blocked_by_qualifier(None, &es));
+    }
+
+    #[test]
+    fn physical_verbal_requires_named_agent() {
+        let rules = semantic_rules();
+        let ctx = SemanticContext::from_stem(&stem("Orbe fracturado", None, &[]), &rules);
+        let desgarrado = VerbalState {
+            mp: Some("desgarrados".to_string()),
+            verb_tags: vec!["tear".to_string()],
+            ..VerbalState::default()
+        };
+        assert!(verbal_state_requires_agent(&desgarrado, &rules));
+        let phrase = super::super::verbal::forge_verbal_phrase(
+            super::super::common::Language::Spanish,
+            AgreementKey {
+                gender: Gender::M,
+                number: Number::Plural,
+            },
+            42,
+            7,
+            &[desgarrado],
+            &[],
+            &[super::super::grammar::ProperName::Plain("Modi".to_string())],
+            "por",
+            &ctx,
+            &rules,
+            &VerbalForgeContext::default(),
+            &super::super::verbal::VerbalAttachPolicy::default(),
+            |_, _| 999,
+        );
+        assert_eq!(phrase.as_deref(), Some("desgarrados por Modi"));
     }
 
     #[test]
@@ -1567,7 +1891,7 @@ mod tests {
             7,
             &[tocado],
             &[],
-            &["Anubis".to_string()],
+            &[super::super::grammar::ProperName::Plain("Anubis".to_string())],
             "por",
             &ctx,
             &rules,
@@ -1619,6 +1943,12 @@ mod tests {
             ..AgentEntry::default()
         };
         assert!(!allows_verbal_agent(&quien, &forge, &rules));
+    }
+
+    #[test]
+    fn surface_redundant_when_modifier_repeats_stem_lead() {
+        assert!(surface_redundant_with_stem("Проклятый кандал", "проклятый"));
+        assert!(!surface_redundant_with_stem("Дикий осколок", "алчный"));
     }
 
     #[test]

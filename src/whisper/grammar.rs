@@ -1,5 +1,7 @@
 //! Inflection keys and agreement for epithet pieces (`m`/`f`/`n`, `s`/`p`, …).
 
+use super::common::Language;
+
 /// Head gender for agreement (Spanish/Russian); English ignores for invariant pieces.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Gender {
@@ -40,6 +42,58 @@ impl AgreementKey {
     }
 }
 
+/// Mythic / proper name with optional declined surfaces (patron genitive, verbal instrumental).
+#[derive(Debug, Clone, serde::Deserialize)]
+#[serde(untagged)]
+pub enum ProperName {
+    Plain(String),
+    Forms(ProperNameForms),
+}
+
+/// Declined surfaces for patronymic and verbal attribution.
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct ProperNameForms {
+    #[serde(alias = "name")]
+    pub nominative: String,
+    /// Genitive for patron suffix (`… Азазеля`).
+    #[serde(default)]
+    pub patron: Option<String>,
+    /// Instrumental for participial agent (`запечатанные …м`).
+    #[serde(default)]
+    pub verbal: Option<String>,
+}
+
+impl ProperName {
+    #[must_use]
+    pub fn nominative(&self) -> &str {
+        match self {
+            Self::Plain(s) | Self::Forms(ProperNameForms { nominative: s, .. }) => s.as_str(),
+        }
+    }
+
+    /// Surface appended after the head phrase (Spanish `de X`, Russian genitive).
+    #[must_use]
+    pub fn patron_surface(&self, language: Language) -> Option<&str> {
+        match (self, language) {
+            (Self::Plain(_), Language::Russian) => None,
+            (Self::Plain(s), _) => Some(s.as_str()),
+            (Self::Forms(f), Language::Russian) => f.patron.as_deref(),
+            (Self::Forms(f), _) => Some(f.patron.as_deref().unwrap_or(f.nominative.as_str())),
+        }
+    }
+
+    /// Surface fused with a post-nominal participle (`… тенью`, `… Артуром`).
+    #[must_use]
+    pub fn verbal_surface(&self, language: Language) -> Option<&str> {
+        match (self, language) {
+            (Self::Plain(_), Language::Russian) => None,
+            (Self::Plain(s), _) => Some(s.as_str()),
+            (Self::Forms(f), Language::Russian) => f.verbal.as_deref(),
+            (Self::Forms(f), _) => Some(f.verbal.as_deref().unwrap_or(f.nominative.as_str())),
+        }
+    }
+}
+
 /// One inflected surface form set (adjective, curse, title).
 #[derive(Debug, Clone, Default, serde::Deserialize)]
 pub struct InflectedWord {
@@ -76,6 +130,33 @@ pub struct InflectedWord {
     pub kind: Option<String>,
 }
 
+/// Russian neuter singular from masculine `‑ый` / `‑ий` / `‑ой` when `ns` is absent in TOML.
+#[must_use]
+pub fn russian_neuter_from_masculine_singular(ms: &str) -> Option<String> {
+    if let Some(stem) = ms.strip_suffix("ий") {
+        return Some(format!("{stem}ее"));
+    }
+    if let Some(stem) = ms.strip_suffix("ый") {
+        return Some(format!("{stem}ое"));
+    }
+    if let Some(stem) = ms.strip_suffix("ой") {
+        return Some(format!("{stem}ое"));
+    }
+    None
+}
+
+/// Russian neuter plural from masculine plural `‑ые` / `‑ие` when `np` is absent.
+#[must_use]
+pub fn russian_neuter_from_masculine_plural(mp: &str) -> Option<String> {
+    if let Some(stem) = mp.strip_suffix("ие") {
+        return Some(format!("{stem}ие"));
+    }
+    if let Some(stem) = mp.strip_suffix("ые") {
+        return Some(format!("{stem}ые"));
+    }
+    None
+}
+
 impl InflectedWord {
     fn inflected(&self, key: AgreementKey) -> Option<&str> {
         match (key.gender, key.number) {
@@ -93,6 +174,35 @@ impl InflectedWord {
                 .as_deref()
                 .or(self.mp.as_deref())
                 .or(self.fp.as_deref()),
+        }
+    }
+
+    /// Inflected surface with Russian neuter synthesis when `ns` / `np` are missing.
+    #[must_use]
+    pub fn resolve_agreeing_owned(&self, key: AgreementKey) -> Option<String> {
+        if let Some(inv) = &self.invariant {
+            return Some(inv.clone());
+        }
+        match (key.gender, key.number) {
+            (Gender::N, Number::Singular) => {
+                if let Some(ns) = &self.ns {
+                    return Some(ns.clone());
+                }
+                if let Some(ms) = &self.ms {
+                    return russian_neuter_from_masculine_singular(ms).or_else(|| Some(ms.clone()));
+                }
+                return self.fs.clone();
+            }
+            (Gender::N, Number::Plural) => {
+                if let Some(np) = &self.np {
+                    return Some(np.clone());
+                }
+                if let Some(mp) = &self.mp {
+                    return russian_neuter_from_masculine_plural(mp).or_else(|| Some(mp.clone()));
+                }
+                return self.fp.clone().or_else(|| self.mp.clone());
+            }
+            _ => self.inflected(key).map(str::to_string),
         }
     }
 

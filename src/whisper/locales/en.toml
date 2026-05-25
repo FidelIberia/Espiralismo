@@ -157,6 +157,7 @@ invariant = "frozen"
 
 [[epithet.adjectives]]
 invariant = "ravenous"
+kind = "living_trait"
 
 [[epithet.adjectives]]
 invariant = "withered"
@@ -338,6 +339,14 @@ proper_names = [
 ]
 
 [epithet.semantic]
+possessive_origin_qualifier_prefixes = ["of "]
+verbal_agent_linkers = [" by "]
+banned_verbal_surface_markers = [
+    "something",
+    "someone",
+    "by someone",
+    "by something",
+]
 verbal_agent_experience_markers = [
     "betray",
     "sworn",
@@ -353,6 +362,10 @@ verbal_physical_markers = [
     "buried",
 ]
 living_trait_markers = [
+    "raven",
+    "voraz",
+    "жадн",
+    "алчн",
     "pitiless",
     "merciless",
     "ruthless",
@@ -543,6 +556,14 @@ banned_agent_markers = [
 a = "fire_active"
 b = "fire_done"
 
+[[epithet.semantic.adjective_stem_rules]]
+stem_tags = ["object", "relic"]
+forbid_kinds = ["living_trait"]
+
+[[epithet.semantic.adjective_stem_rules]]
+stem_classes = ["object", "abstract"]
+forbid_kinds = ["living_trait"]
+
 [[epithet.semantic.archetype_compat]]
 archetype = "edge"
 forbids = ["hollow_volume", "organic", "wither", "living_trait"]
@@ -552,12 +573,28 @@ archetype = "mirror"
 forbids = ["organic", "wither", "living_trait"]
 
 [[epithet.semantic.archetype_compat]]
+archetype = "relic"
+forbids = ["living_trait", "organic", "wither"]
+
+[[epithet.semantic.archetype_compat]]
+archetype = "icon"
+forbids = ["living_trait", "organic"]
+
+[[epithet.semantic.archetype_compat]]
+archetype = "bell"
+forbids = ["living_trait", "organic"]
+
+[[epithet.semantic.archetype_compat]]
 archetype = "throne"
 forbids = ["organic", "wither", "living_trait"]
 
 [[epithet.semantic.archetype_compat]]
 archetype = "crown"
-forbids = ["organic", "wither"]
+forbids = ["organic", "wither", "living_trait"]
+
+[[epithet.semantic.archetype_compat]]
+archetype = "vessel"
+forbids = ["sharp", "edge", "living_trait"]
 
 [[epithet.semantic.archetype_compat]]
 archetype = "weapon"

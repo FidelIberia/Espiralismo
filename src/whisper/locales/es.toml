@@ -291,6 +291,7 @@ ms = "voraz"
 fs = "voraz"
 mp = "voraces"
 fp = "voraces"
+kind = "living_trait"
 
 [[epithet.adjectives]]
 ms = "marchito"
@@ -521,6 +522,22 @@ proper_names = [
 ]
 
 [epithet.semantic]
+possessive_origin_qualifier_prefixes = [
+    "del ",
+    "de la ",
+    "de los ",
+    "de las ",
+    "de el ",
+    "de ",
+]
+verbal_agent_linkers = [" por "]
+banned_verbal_surface_markers = [
+    "algo",
+    "alguien",
+    "quien sabe",
+    "something",
+    "someone",
+]
 verbal_agent_experience_markers = [
     "traicion",
     "jurad",
@@ -537,6 +554,10 @@ verbal_physical_markers = [
     "enterr",
 ]
 living_trait_markers = [
+    "voraz",
+    "raven",
+    "жадн",
+    "алчн",
     "despiad",
     "pitiless",
     "merciless",
@@ -731,6 +752,14 @@ banned_agent_markers = [
 a = "fire_active"
 b = "fire_done"
 
+[[epithet.semantic.adjective_stem_rules]]
+stem_tags = ["object", "relic"]
+forbid_kinds = ["living_trait"]
+
+[[epithet.semantic.adjective_stem_rules]]
+stem_classes = ["object", "abstract"]
+forbid_kinds = ["living_trait"]
+
 [[epithet.semantic.archetype_compat]]
 archetype = "edge"
 forbids = ["hollow_volume", "organic", "wither", "living_trait"]
@@ -740,16 +769,28 @@ archetype = "mirror"
 forbids = ["organic", "wither", "living_trait"]
 
 [[epithet.semantic.archetype_compat]]
+archetype = "relic"
+forbids = ["living_trait", "organic", "wither"]
+
+[[epithet.semantic.archetype_compat]]
+archetype = "icon"
+forbids = ["living_trait", "organic"]
+
+[[epithet.semantic.archetype_compat]]
+archetype = "bell"
+forbids = ["living_trait", "organic"]
+
+[[epithet.semantic.archetype_compat]]
 archetype = "throne"
 forbids = ["organic", "wither", "living_trait"]
 
 [[epithet.semantic.archetype_compat]]
 archetype = "crown"
-forbids = ["organic", "wither"]
+forbids = ["organic", "wither", "living_trait"]
 
 [[epithet.semantic.archetype_compat]]
 archetype = "vessel"
-forbids = ["sharp", "edge"]
+forbids = ["sharp", "edge", "living_trait"]
 
 [[epithet.semantic.archetype_compat]]
 archetype = "weapon"
